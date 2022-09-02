@@ -1,8 +1,4 @@
-
-# coding: utf-8
-
-# In[ ]:
-
+#!/usr/bin python3
 
 from z3 import *
 from multiprocessing import Process
@@ -12,6 +8,7 @@ import math
 import pandas as pd
 from threading import Lock
 import time
+import argparse
 import logging
 from sys import exit
 
@@ -121,8 +118,13 @@ with ThreadPoolExecutor() as executor:
 
 
 def main():
-    pass
+    # 1. parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("smt", type=str, required=True, help='input SMT specification file') # SMT file
+    parser.add_argument("--species", type=int, help='initial number of species') #Default potrebbe essere uguale al numero dei processori disponibili, oppure 2
+    args = parser.parse_args()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
     main()
