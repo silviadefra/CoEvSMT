@@ -13,28 +13,19 @@ import logging
 from sys import exit
 
 
-# In[2]:
-
-
+# Parametri per l'algoritmo: vanno passati da linea di comando
+smt_spec = ""
 num_species=2
 num_pop=2
+
+
+# Informazioni sulla specifica: possono essere estratte dal file SMT
 num_var=2
 X=IntVector('x',num_var)
 F=[X[0] > 2, X[0] < 2, X[1] < 10]
 F_split=np.array_split(F, num_species)
 d={'formula':F_split, 'vector': [None]*num_species}
 data=pd.DataFrame(data=d)
-
-
-# In[ ]:
-
-
-#F=[X[0] > 2, X[0] + 2*X[1] == 7, X[1] < 10] #trova soluzioni senza arrivare alg coev
-#F=[X[0] > 2, X[0] < 2, X[1] < 10] #unsat
-
-
-# In[7]:
-
 
 def thread_z3sol(index,s):
     #s=Solver()
@@ -44,11 +35,7 @@ def thread_z3sol(index,s):
         raise ValueError("no solution exists")
     data.at[index,'vector']=[s.model()[i] for i in X]
     data.at[index,'vector']=[0 if i==None else i for i in data.at[index,'vector']]
-    return 5
-
-
-# In[4]:
-
+    return 5 # TODO: perché 5?
 
 def check_sat(s,index,lock):
     global data
@@ -86,45 +73,59 @@ def neighbor(index):
 
 # In[12]:
 
-
-with ThreadPoolExecutor() as executor:
-    solvers=[None]*num_species
-    futures=[None]*num_species
-    for i in range(num_species):
-        solvers[i]=Solver()
-        futures[i] = executor.submit(thread_z3sol, i, solvers[i])
-    for future in as_completed(futures):
-        if future.cancelled():
-            continue
-        try:
-            print(future.result())
-        except ValueError as e:
-            print(f'EXCEPTION! {e}')
-            executor.shutdown(wait=False, cancel_futures=True)
+def run():
+    with ThreadPoolExecutor() as executor:
+        solvers=[None]*num_species
+        futures=[None]*num_species
+        for i in range(num_species):
+            solvers[i]=Solver()
+            futures[i] = executor.submit(thread_z3sol, i, solvers[i])
+        for future in as_completed(futures):
+            if future.cancelled():
+                continue
+            try:
+                print(future.result())
+            except ValueError as e:
+                logging.error(e)
+                executor.shutdown(wait=False, cancel_futures=True)
+                exit()
+        #test da qui in poi
+        lock=Lock()
+        futures=[executor.submit(check_sat,solvers[i],i,lock) for i in range(num_species)]
+        for future in futures:
+            if not future.result():
+                for i in future.result():
+                    futures[i].shutdown(wait=False)
+        species_alive=data.index.values
+        if len(species_alive)==1:
+            print(data.loc[species_alive])
             exit()
-    #test da qui in poi
-    lock=Lock()
-    futures=[executor.submit(check_sat,solvers[i],i,lock) for i in range(num_species)]
-    for future in futures:
-        if not future.result():
-            for i in future.result():
-                futures[i].shutdown(wait=False)
-    species_alive=data.index.values
-    if len(species_alive)==1:
-        print(data.loc[species_alive])
-        exit()
-    futures=[executor.submit(neighbor,i) for i in list(species_alive)]
-    for future in futures: print(future.result())
+        futures=[executor.submit(neighbor,i) for i in list(species_alive)]
+        for future in futures: print(future.result())
 
 
 def main():
-    # 1. parse arguments
+    # parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("smt", type=str, required=True, help='input SMT specification file') # SMT file
+    parser.add_argument("smt", type=str, help='input SMT specification') # SMT file
     parser.add_argument("--species", type=int, help='initial number of species') #Default potrebbe essere uguale al numero dei processori disponibili, oppure 2
+    parser.add_argument("--population", type=int, help='initial number of individuals for each species') #Default potrebbe essere 2
     args = parser.parse_args()
 
+    global smt_spec, num_species, num_pop
+    smt_spec = args.smt
 
+    if args.species:
+        num_species = args.species_alive
+
+    if args.population:
+        pop_size = args.population
+
+    logging.info("Beginning")
+    run()
+    logging.info("End")
+
+# Così lo rendiamo eseguibile
 if __name__ == "__main__":
-    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.ERROR)
     main()
