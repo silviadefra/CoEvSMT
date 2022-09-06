@@ -7,6 +7,7 @@ import numpy as np
 import math
 import pandas as pd
 from threading import Lock
+import random
 import time
 import argparse
 import logging
@@ -24,7 +25,7 @@ num_var=2
 X=IntVector('x',num_var)
 F=[X[0] > 2, X[0] < 2, X[1] < 10]
 F_split=np.array_split(F, num_species)
-d={'formula':F_split, 'vector': [None]*num_species}
+d={'formula':F_split, 'vector': [None]*num_species, 'population':[[None]*num_pop]*num_species}
 data=pd.DataFrame(data=d)
 
 def thread_z3sol(index,s):
@@ -33,7 +34,7 @@ def thread_z3sol(index,s):
     s.add(list(data.at[index,'formula']))
     if s.check()==unsat:
         raise ValueError("no solution exists")
-    data.at[index,'vector']=[s.model()[i] for i in X]
+    data.at[index,'vector']=[s.model()[i].as_long() for i in X]
     data.at[index,'vector']=[0 if i==None else i for i in data.at[index,'vector']]
     return 5 # TODO: perché 5?
 
@@ -62,14 +63,31 @@ def neighbor(index):
     for i in list(data.index.values):
         if i==index:
             continue
-        for x,y in data.at[index,'vector'],data.at[i,'vector']:
-            print(x)
-            dif[i]=dif[i]+abs(x-y)
-    print(dif)
-    my_neighbor=dif.index(min(dif))
-    print(min(dif))
-    return my_neighbor
+        subtracted = [abs(x - y) for (x,y) in zip(data.at[index,'vector'],data.at[i,'vector'])]
+            dif[i]=sum(subtracted)
+    my_neighbor_dif=min(dif)
+    my_neighbor=dif.index(my_neighbor_dif)
+    return zip(my_neighbor,my_neighbor_dif)
 
+
+def genetic_alg(index,my_neighbor):
+    global data
+    generation=0
+    best_fitness=my_neighbor[1]
+    animal=[format(element1,'b').zfill(16) for element1 in data.at[index,'vector']]
+    data.at[index, 'population']=[animal]*num_pop
+    population=[animal,best_fitness]*num_pop        #data.at[index, 'population']=[animal]*num_pop
+    while best_fitness > 0 and generation < 1000:
+        new_population = [None]*num_pop
+        my_parent1= min(random.sample(population,2), key=lambda individual: individual[1])[0]#my_parent=random.sample(data.at[index, 'population'],2)  #best fitness da fare
+        my_neighbor_parent=random.choice(data.at[my_neighbor[0],'population'])
+        if random.random() < 0.7:
+            pos=randrange(16)
+            my_parent2=my_parent1[:pos]+my_neighbor_parent[pos:]
+            my_parent1=my_neighbor_parent[:pos]+my_parent1[pos:]
+        for i in range(16):
+            if random.random()<0.3:
+                #cambiare bit in pos i            
 
 # In[12]:
 
