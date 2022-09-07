@@ -64,7 +64,7 @@ def neighbor(index):
         if i==index:
             continue
         subtracted = [abs(x - y) for (x,y) in zip(data.at[index,'vector'],data.at[i,'vector'])]
-            dif[i]=sum(subtracted)
+        dif[i]=sum(subtracted)
     my_neighbor_dif=min(dif)
     my_neighbor=dif.index(my_neighbor_dif)
     return zip(my_neighbor,my_neighbor_dif)
@@ -87,7 +87,8 @@ def genetic_alg(index,my_neighbor):
             my_parent1=my_neighbor_parent[:pos]+my_parent1[pos:]
         for i in range(16):
             if random.random()<0.3:
-                #cambiare bit in pos i            
+                #TODO: cambiare bit in pos i
+                pass
 
 # In[12]:
 
