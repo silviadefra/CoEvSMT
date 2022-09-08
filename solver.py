@@ -99,7 +99,7 @@ def run():
         solvers=[None]*num_species
         futures=[None]*num_species
         for i in range(num_species):
-            solvers[i]=Solver()
+            solvers[i] = Solver()
             futures[i] = executor.submit(thread_z3sol, i, solvers[i])
         for future in as_completed(futures):
             if future.cancelled():
