@@ -11,6 +11,7 @@ import random
 import time
 import argparse
 import logging
+import re
 from sys import exit
 
 
@@ -134,19 +135,122 @@ def run():
         futures=[executor.submit(neighbor,i) for i in list(species_alive)]
         for future in futures: print(future.result())
 
+
+########################
+# CODICE VECCHIO SOPRA #
+########################
+
+
+###
+# This function takes a SMT specification and splits it into N sub specitications returned as a list
+###
+def parse_and_split(smt_spec, n):
+    # TODO: TBI
+    preamble_segment = extract_preamble(smt_spec)
+    logging.debug("SMT preamble: " + preamble_segment)
+
+    assertion_sub_segments = split_assertions(smt_spec, n)
+    logging.debug("SMT assertions: " + '\n'.join(assertion_sub_segments))
+
+    sub_specs = []
+
+    for i in range(n):
+        sub_specs.append(preamble_segment + '\n' + assertion_sub_segments[i])
+
+    return sub_specs
+
+###
+# This function ...
+###
+def extract_preamble(smt_spec):
+    # TODO: TBI
+    return ""
+
+###
+# This function ...
+###
+def split_assertions(smt_spec, n):
+
+    assertions = re.findall('^\(assert.*\n', smt_spec, re.MULTILINE)
+
+    assertion_blocks = np.array_split(assertions, n)
+
+    return [''.join(block) for block in assertion_blocks]
+
+###
+# This function solves a list of specs and returns a list of models (one for each spec).
+# Model i in the returned list is None if spec is is UNSAT.
+###
+def solve_specs(specs):
+    # TODO: TBI
+    return []
+
+###
+# This function creates one population from each model in *models*
+###
+def initialize_populations(models):
+    # TODO: TBI
+    return []
+
+###
+# This function returns true when the computation is over
+###
+def stop_condition(populations):
+    # TODO: TBI
+    return True
+
+###
+# This function applies crossover and mutation to each population in *populations*.
+# Returns a new list of populations
+###
+def cross_and_evolve(populations):
+    # TODO: TBI
+    return []
+
+###
+# This function eliminates the worst individuals
+###
+def select_fittests(populations):
+    # TODO: TBI
+    return []
+
+###
+# This function returns (i,j) if populations i and j collide (the have a common individual). (None, None) otherwise
+###
+def population_collision(populations):
+    # TODO: TBI
+    return None, None
+
+###
+# This function returns a list of populations where population i and j have been merged
+###
+def merge_populations(populations, i, j):
+    # TODO: TBI
+    return []
+
+
+
 ###
 # Main function
 ###
 def main():
+
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("smt", type=str, help='input SMT specification') # SMT file
     parser.add_argument("--species", type=int, help='initial number of species') #Default potrebbe essere uguale al numero dei processori disponibili, oppure 2
     parser.add_argument("--population", type=int, help='initial number of individuals for each species') #Default potrebbe essere 2
+    parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
     args = parser.parse_args()
 
     global smt_spec, num_species, num_pop
-    smt_spec = args.smt
+
+    if args.file:
+        file = open(args.smt, "r")
+        smt_spec = file.read()
+        file.close()
+    else:
+        smt_spec = args.smt
 
     if args.species:
         num_species = args.species_alive
@@ -154,11 +258,43 @@ def main():
     if args.population:
         pop_size = args.population
 
+    ### Main algorithm
     logging.info("Beginning")
-    run()
+
+    # STEP 1: parse *SMT specification* and split it into *N* smaller *SMT specifications*
+    sub_specs = parse_and_split(smt_spec, num_species)
+
+    # STEP 2: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*)
+    models = solve_specs(sub_specs)
+
+    # STEP 2.1: if exists i in models s.t. models[i] == None --> return UNSAT.
+    for m in models:
+        if m == None:
+            logging.info("UNSAT model " + m)
+            exit()
+
+    # STEP 3: initialize *N populations* with the *N models*
+    populations = initialize_populations(models)
+
+    # STEP 4: repeat until *stop condition*
+    while not stop_condition(populations):
+
+        # STEP 5: Parallel crossover and mutation
+        new_populations = cross_and_evolve(populations)
+
+        # STEP 6: Parallel selection (based on *fitness function*)
+        new_populations = select_fittests(new_populations)
+
+        # STEP 7: If 2 populations collide: merge
+        pop_i, pop_j = population_collision(populations)
+        if not pop_i is None:
+            new_populations = merge_populations(new_populations, pop_i, pop_j)
+
+        populations = new_populations
+
     logging.info("End")
 
 # Così lo rendiamo eseguibile
 if __name__ == "__main__":
-    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.ERROR)
+    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
     main()
