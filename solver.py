@@ -28,6 +28,11 @@ F_split=np.array_split(F, num_species)
 d={'formula':F_split, 'vector': [None]*num_species, 'population':[[None]*num_pop]*num_species}
 data=pd.DataFrame(data=d)
 
+
+
+###
+#
+###
 def thread_z3sol(index,s):
     #s=Solver()
     global data
