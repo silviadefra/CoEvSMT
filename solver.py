@@ -31,6 +31,8 @@ data=pd.DataFrame(data=d)
 def thread_z3sol(index,s):
     #s=Solver()
     global data
+    # CON LA RIGA SOTTO PUOI CARICARE DIRETTAMENTE UNA SPECIFICA SMT DA STRINGA
+    # s.add(z3.parse_smt2_string(smt_spec))
     s.add(list(data.at[index,'formula']))
     if s.check()==unsat:
         raise ValueError("no solution exists")
