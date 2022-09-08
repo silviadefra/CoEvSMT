@@ -31,9 +31,9 @@ data=pd.DataFrame(data=d)
 
 
 ###
-#
+# This function ...
 ###
-def thread_z3sol(index,s):
+def thread_z3sol(index,s): # perché `thread`?
     #s=Solver()
     global data
     # CON LA RIGA SOTTO PUOI CARICARE DIRETTAMENTE UNA SPECIFICA SMT DA STRINGA
@@ -45,6 +45,9 @@ def thread_z3sol(index,s):
     data.at[index,'vector']=[0 if i==None else i for i in data.at[index,'vector']]
     return 5 # TODO: perché 5?
 
+###
+# This function ...
+###
 def check_sat(s,index,lock):
     global data
     list_kill_futures=[]
@@ -60,10 +63,9 @@ def check_sat(s,index,lock):
             list_kill_futures.append(i) #non necessario, basta non riattivare i threads
     return list_kill_futures
 
-
-# In[5]:
-
-
+###
+# This function ...
+###
 def neighbor(index):
     global data
     dif=[100]*num_species #da vedere il 100
@@ -76,7 +78,9 @@ def neighbor(index):
     my_neighbor=dif.index(my_neighbor_dif)
     return zip(my_neighbor,my_neighbor_dif)
 
-
+###
+# This function ...
+###
 def genetic_alg(index,my_neighbor):
     global data
     generation=0
@@ -97,8 +101,9 @@ def genetic_alg(index,my_neighbor):
                 #TODO: cambiare bit in pos i
                 pass
 
-# In[12]:
-
+###
+# This function ...
+###
 def run():
     with ThreadPoolExecutor() as executor:
         solvers=[None]*num_species
@@ -129,7 +134,9 @@ def run():
         futures=[executor.submit(neighbor,i) for i in list(species_alive)]
         for future in futures: print(future.result())
 
-
+###
+# Main function
+###
 def main():
     # parse arguments
     parser = argparse.ArgumentParser()
