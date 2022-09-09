@@ -160,18 +160,18 @@ def parse_and_split(smt_spec, n):
     return sub_specs
 
 ###
-# This function ...
+# This function takes a SMT specification and returns its preamble (without the assertions)
 ###
 def extract_preamble(smt_spec):
     # TODO: TBI
     return ""
 
 ###
-# This function ...
+# This function takes a SMT specification and returns the assertions splited into N sub assertions
 ###
 def split_assertions(smt_spec, n):
 
-    assertions = re.findall('^\(assert.*\n', smt_spec, re.MULTILINE)
+    assertions = re.findall('(?:\(assert[^()]+|\([^)]+\))+(?=\))\)\n', smt_spec, re.MULTILINE) #prec '^\(assert.*\n' '(?:\(assert[^()]+|\([^)]+\))+(?=\))\)\n'
 
     assertion_blocks = np.array_split(assertions, n)
 
