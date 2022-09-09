@@ -11,9 +11,10 @@ import random
 import time
 import argparse
 import logging
-import re
 from sys import exit
-
+from io import StringIO
+from pysmt.smtlib.parser import SmtLibParser
+from pysmt.smtlib.script import SmtLibScript
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
@@ -145,44 +146,67 @@ def run():
 # This function takes a SMT specification and splits it into N sub specitications returned as a list
 ###
 def parse_and_split(smt_spec, n):
-    # TODO: TBI
-    preamble_segment = extract_preamble(smt_spec)
-    logging.debug("SMT preamble: " + preamble_segment)
 
-    assertion_sub_segments = split_assertions(smt_spec, n)
-    logging.debug("SMT assertions: " + '\n'.join(assertion_sub_segments))
+    parser = SmtLibParser()
 
-    sub_specs = []
+    script = parser.get_script(StringIO(smt_spec))
 
+    preamble_segment = extract_preamble(script)
+    logging.debug("SMT preamble extracted")
+
+    assertion_blocks = split_assertions(script, n)
+    logging.debug("SMT assertion blocks extracted")
+
+    sub_script_list = []
     for i in range(n):
-        sub_specs.append(preamble_segment + '\n' + assertion_sub_segments[i])
+        sub_script = SmtLibScript()
+        for p in preamble_segment:
+            sub_script.add_command(p)
+        for a in assertion_blocks[i]:
+            sub_script.add_command(a)
+        sub_script_list.append(sub_script)
 
-    return sub_specs
+    return sub_script_list
 
 ###
 # This function takes a SMT specification and returns its preamble (without the assertions)
 ###
-def extract_preamble(smt_spec):
+def extract_preamble(script):
     # TODO: TBI
-    return ""
+    return []
 
 ###
 # This function takes a SMT specification and returns the assertions splited into N sub assertions
 ###
-def split_assertions(smt_spec, n):
-    #TODO
-    assertions = re.findall('\(assert(?:[^()]+|\([^)]+\))+\)\n', smt_spec, re.MULTILINE) #prec '^\(assert.*\n' 
+def split_assertions(script, n):
 
-    assertion_blocks = np.array_split(assertions, n)
+    num_assertions = script.count_command_occurrences("assert")
+    assertions = script.filter_by_command_name("assert")
 
-    return [''.join(block) for block in assertion_blocks]
+    assertion_blocks = []
+
+    for b in range(n):
+        assertion_blocks.append([])
+
+    i = 0
+    for a in assertions:
+        assertion_blocks[i%n].append(a)
+        i += 1
+
+    return assertion_blocks
 
 ###
 # This function solves a list of specs and returns a list of models (one for each spec).
 # Model i in the returned list is None if spec is is UNSAT.
 ###
 def solve_specs(specs):
-    # TODO: TBI
+
+    file_name_prefix = "__tmp_spec_"
+    i = 0
+    for script in specs:
+        script.to_file(file_name_prefix + str(i))
+        i += 1
+        
     return []
 
 ###
