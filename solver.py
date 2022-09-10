@@ -206,13 +206,23 @@ def split_assertions(script, n):
 ###
 def solve_specs(specs):
 
+    # TODO: constant should not be local
     file_name_prefix = "__tmp_spec_"
+    models = []
     i = 0
+
+    # TODO: the following loop should be parallelized
     for script in specs:
-        script.to_file(file_name_prefix + str(i))
+        tmp_spec_file_name = file_name_prefix + str(i)
+        script.to_file(tmp_spec_file_name)
         i += 1
 
-    return []
+        solver = z3.Solver()
+        solver.from_file(tmp_spec_file_name)
+        solver.check()
+        models.append(solver.model())
+
+    return models
 
 ###
 # This function creates one population from each model in *models*
@@ -295,6 +305,10 @@ def main():
 
     # STEP 2: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*)
     models = solve_specs(sub_specs)
+
+    # TODO: temporary debugging
+    for m in models:
+        print(m)
 
     # STEP 2.1: if exists i in models s.t. models[i] == None --> return UNSAT.
     for m in models:
