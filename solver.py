@@ -221,10 +221,11 @@ def solve_specs(specs):
         f = open(tmp_spec_file_name, 'r')
         fstr = f.read()
         f.close()
-        fstr.replace(" ()", "")
+        fstr=fstr.replace(" ()", "")
         f = open(tmp_spec_file_name, 'w')
         f.write(fstr)
         f.close()
+        f=open(tmp_spec_file_name, 'r')
         ### FINE TEMP CODE
 
         solver = z3.Solver()
