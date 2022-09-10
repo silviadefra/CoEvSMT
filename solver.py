@@ -149,14 +149,17 @@ def run():
 def parse_and_split(smt_spec, n):
 
     parser = SmtLibParser()
-
     script = parser.get_script(StringIO(smt_spec))
+
+    print(script)
 
     preamble_segment = extract_preamble(script)
     logging.debug("SMT preamble extracted")
+    print(preamble_segment)
 
     assertion_blocks = split_assertions(script, n)
     logging.debug("SMT assertion blocks extracted")
+    print(assertion_blocks)
 
     sub_script_list = []
     for i in range(n):
@@ -206,34 +209,25 @@ def split_assertions(script, n):
 ###
 def solve_specs(specs):
 
-    # TODO: constant should not be local
-    file_name_prefix = "__tmp_spec_"
     models = []
-    i = 0
 
     # TODO: the following loop should be parallelized
     for script in specs:
-        tmp_spec_file_name = file_name_prefix + str(i)
-        script.to_file(tmp_spec_file_name)
-        i += 1
+        stream = StringIO()
+        script.serialize(stream)
+        formula = stream.read()
 
         ### TEMP CODE: ripuliamo il file dalle () extra
-        f = open(tmp_spec_file_name, 'r')
-        fstr = f.read()
-        f.close()
-        fstr=fstr.replace(" ()", "")
-        f = open(tmp_spec_file_name, 'w')
-        f.write(fstr)
-        f.close()
-        f=open(tmp_spec_file_name, 'r')
+        formula.replace(" ()", "")
         ### FINE TEMP CODE
 
         solver = z3.Solver()
-        solver.from_file(tmp_spec_file_name)
+        solver.from_string(formula)
         solver_response = solver.check()
 
         if solver_response == sat:
-            models.append(solver.model())
+            model = solver.model()
+            models.append(model)
         else:
             print(solver_response)
             exit()
@@ -244,7 +238,9 @@ def solve_specs(specs):
 # This function creates one population from each model in *models*
 ###
 def initialize_populations(models):
-    # TODO: TBI
+    for m in models:
+        print(m)
+
     return []
 
 ###
