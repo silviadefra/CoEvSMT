@@ -217,10 +217,25 @@ def solve_specs(specs):
         script.to_file(tmp_spec_file_name)
         i += 1
 
+        ### TEMP CODE: ripuliamo il file dalle () extra
+        f = open(tmp_spec_file_name, 'r')
+        fstr = f.read()
+        f.close()
+        fstr.replace(" ()", "")
+        f = open(tmp_spec_file_name, 'w')
+        f.write(fstr)
+        f.close()
+        ### FINE TEMP CODE
+
         solver = z3.Solver()
         solver.from_file(tmp_spec_file_name)
-        solver.check()
-        models.append(solver.model())
+        solver_response = solver.check()
+
+        if solver_response == sat:
+            models.append(solver.model())
+        else:
+            print(solver_response)
+            exit()
 
     return models
 
@@ -305,10 +320,6 @@ def main():
 
     # STEP 2: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*)
     models = solve_specs(sub_specs)
-
-    # TODO: temporary debugging
-    for m in models:
-        print(m)
 
     # STEP 2.1: if exists i in models s.t. models[i] == None --> return UNSAT.
     for m in models:
