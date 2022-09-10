@@ -15,6 +15,7 @@ from sys import exit
 from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
+import itertools
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
@@ -172,15 +173,19 @@ def parse_and_split(smt_spec, n):
 # This function takes a SMT specification and returns its preamble (without the assertions)
 ###
 def extract_preamble(script):
-    # TODO: TBI
-    return []
+
+    set_logic = script.filter_by_command_name("set-logic")
+    decl_consts = script.filter_by_command_name("declare-const")
+    # Only constants for now
+    # decl_funs = script.filter_by_command_name("declare-fun")
+
+    return itertools.chain(set_logic, decl_consts)
 
 ###
 # This function takes a SMT specification and returns the assertions splited into N sub assertions
 ###
 def split_assertions(script, n):
 
-    num_assertions = script.count_command_occurrences("assert")
     assertions = script.filter_by_command_name("assert")
 
     assertion_blocks = []
@@ -206,7 +211,7 @@ def solve_specs(specs):
     for script in specs:
         script.to_file(file_name_prefix + str(i))
         i += 1
-        
+
     return []
 
 ###
