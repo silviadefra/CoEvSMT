@@ -105,7 +105,7 @@ def solve_specs(specs):
         # logging.debug(log)
         solver_response = solver.solve()
 
-        if solver_response == sat:
+        if solver_response:
             model = solver.get_model()
             models.append(model)
         else:
@@ -119,7 +119,7 @@ def solve_specs(specs):
 ###
 def initialize_populations(models):
     for m in models:
-        print(m)
+        logging.debug(m)
 
     return []
 
@@ -197,12 +197,6 @@ def main():
 
     # STEP 2: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*)
     models = solve_specs(sub_specs)
-
-    # STEP 2.1: if exists i in models s.t. models[i] == None --> return UNSAT.
-    for m in models:
-        if m == None:
-            logging.info("UNSAT model " + m)
-            exit()
 
     # STEP 3: initialize *N populations* with the *N models*
     populations = initialize_populations(models)
