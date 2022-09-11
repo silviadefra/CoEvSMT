@@ -39,15 +39,24 @@ def parse_and_split(smt_spec, n):
     logging.debug("SMT assertion blocks extracted")
 
     sub_script_list = []
+    sub_script_preamble = SmtLibScript()
+    for p in preamble_segment:
+        sub_script_preamble.add_command(p)
     for i in range(n):
-        sub_script = SmtLibScript()
-        for p in preamble_segment:
-            sub_script.add_command(p)
+        sub_script = sub_script_preamble
         for a in assertion_blocks[i]:
             sub_script.add_command(a)
         sub_script_list.append(sub_script)
-
+    #for i in range(n):  
+        #sub_script = SmtLibScript()
+        #for p in preamble_segment:
+            #sub_script.add_command(p)
+        #for a in assertion_blocks[i]:
+            #sub_script.add_command(a)
+        #sub_script_list.append(sub_script)
+    
     return sub_script_list
+
 
 ###
 # This function takes a SMT specification and returns its preamble (without the assertions)
