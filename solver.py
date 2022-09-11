@@ -92,10 +92,12 @@ def solve_specs(specs):
     for script in specs:
 
         solver = Solver(name="z3")
-        solver_response = solver.solve(script)
+        log = script.evaluate(solver)
+        # logging.debug(log)
+        solver_response = solver.solve()
 
         if solver_response == sat:
-            model = solver.model(script)
+            model = solver.get_model()
             models.append(model)
         else:
             print(solver_response)
