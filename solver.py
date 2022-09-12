@@ -16,12 +16,14 @@ from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
 from pysmt.shortcuts import Solver
+import copy
 import itertools
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
 num_species=2
 num_pop=2
+literals = []
 
 
 ###
@@ -43,20 +45,29 @@ def parse_and_split(smt_spec, n):
     for p in preamble_segment:
         sub_script_preamble.add_command(p)
     for i in range(n):
-        sub_script = sub_script_preamble
+        sub_script = SmtLibScript()
+        for a in sub_script_preamble:
+            sub_script.add_command(a)
+
         for a in assertion_blocks[i]:
             sub_script.add_command(a)
+
         sub_script_list.append(sub_script)
-    #for i in range(n):  
+    #for i in range(n):
         #sub_script = SmtLibScript()
         #for p in preamble_segment:
             #sub_script.add_command(p)
         #for a in assertion_blocks[i]:
             #sub_script.add_command(a)
         #sub_script_list.append(sub_script)
-    
+
     return sub_script_list
 
+
+def store_literals(declarations):
+    global literals
+    for d in declarations:
+        literals.append(d.serialize_to_string().split(' ')[1])
 
 ###
 # This function takes a SMT specification and returns its preamble (without the assertions)
@@ -67,6 +78,8 @@ def extract_preamble(script):
     decl_consts = script.filter_by_command_name("declare-const")
     # Only constants for now
     # decl_funs = script.filter_by_command_name("declare-fun")
+
+    store_literals(decl_consts)
 
     return itertools.chain(set_logic, decl_consts)
 
