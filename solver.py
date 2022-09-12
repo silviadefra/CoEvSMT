@@ -121,8 +121,11 @@ def solve_specs(specs):
         if solver_response:
             model = solver.get_model()
             models.append(model)
+        elif solver.is_unsat():
+            print("unsat")
+            exit()
         else:
-            print(solver_response)
+            print("unknown")
             exit()
 
     return models
@@ -131,7 +134,10 @@ def solve_specs(specs):
 # This function creates one population from each model in *models*
 ###
 def initialize_populations(models):
+
+    # TODO: the following loop should be parallelized
     for m in models:
+        #m=[m[i] for i in consts]
         logging.debug(m)
 
     return []
