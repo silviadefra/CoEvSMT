@@ -145,7 +145,7 @@ def initialize_populations(models):
         population=[m.get_py_value(i) for i in literals]
         populations.append([population]*num_pop)
         
-    logging.debug(populations)
+    #logging.debug(populations)
 
     return populations
 
@@ -158,7 +158,7 @@ def stop_condition(populations):
         stop=True
     else:
         stop=False
-    # TODO: TBI
+
     return True #stop
 
 ###
@@ -166,7 +166,20 @@ def stop_condition(populations):
 # Returns a new list of populations
 ###
 def cross_and_evolve(populations):
-    # TODO: TBI
+
+    # TODO: the following loop should be parallelized
+    for population in populations:
+        (parent1,parent2)= random.sample(population,2) #to improve (with fitness)
+        for i in len(parent1):
+            if random.random() < 0.7:
+                pos=randrange(16)
+                bin1=f"{parent1[i]:0posb}"
+                bin2=f"{parent2[i]:0posb}"
+                child1[i]=my_bin[:pos]+my_neighbor_bin[pos:]
+                child2[i]=my_neighbor_bin[:pos]+my_bin[pos:]
+                child1[i]=int(child1[i],2)
+                child2[i]=int(child2[i],2)
+        logging.debug(child1)
     return []
 
 ###
