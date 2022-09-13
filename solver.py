@@ -142,21 +142,24 @@ def initialize_populations(models):
 
     # TODO: the following loop should be parallelized
     for m in models:
-        #logging.debug(m[a0])
-        #m.get_py_value(a0)
         population=[m.get_py_value(i) for i in literals]
         populations.append([population]*num_pop)
         
     logging.debug(populations)
 
-    return []
+    return populations
 
 ###
 # This function returns true when the computation is over
 ###
 def stop_condition(populations):
+
+    if len(populations)==1:
+        stop=True
+    else:
+        stop=False
     # TODO: TBI
-    return True
+    return True #stop
 
 ###
 # This function applies crossover and mutation to each population in *populations*.
