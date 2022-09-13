@@ -24,6 +24,7 @@ smt_spec = ""
 num_species=2
 num_pop=2
 literals = []
+sub_script_preamble = SmtLibScript()
 
 
 ###
@@ -41,7 +42,7 @@ def parse_and_split(smt_spec, n):
     logging.debug("SMT assertion blocks extracted")
 
     sub_script_list = []
-    sub_script_preamble = SmtLibScript()
+    global sub_script_preamble
     for p in preamble_segment:
         sub_script_preamble.add_command(p)
     for i in range(n):
@@ -51,7 +52,7 @@ def parse_and_split(smt_spec, n):
 
         for a in assertion_blocks[i]:
             sub_script.add_command(a)
-
+    
         sub_script_list.append(sub_script)
     #for i in range(n):
         #sub_script = SmtLibScript()
@@ -64,10 +65,10 @@ def parse_and_split(smt_spec, n):
     return sub_script_list
 
 
-def store_literals(declarations):
-    global literals
-    for d in declarations:
-        literals.append(d.serialize_to_string().split(' ')[1])
+#def store_literals(declarations):
+    #global literals
+    #for d in declarations:
+        #literals.append(d.serialize_to_string().split(' ')[1])
 
 ###
 # This function takes a SMT specification and returns its preamble (without the assertions)
@@ -79,7 +80,7 @@ def extract_preamble(script):
     # Only constants for now
     # decl_funs = script.filter_by_command_name("declare-fun")
 
-    store_literals(decl_consts)
+    #store_literals(decl_consts)
 
     return itertools.chain(set_logic, decl_consts)
 
@@ -109,15 +110,15 @@ def split_assertions(script, n):
 def solve_specs(specs):
 
     models = []
+    global literals
 
     # TODO: the following loop should be parallelized
     for script in specs:
-
         solver = Solver(name="z3")
         log = script.evaluate(solver)
         # logging.debug(log)
         solver_response = solver.solve()
-
+        literals=list(solver.environment.formula_manager.get_all_symbols()) 
         if solver_response:
             model = solver.get_model()
             models.append(model)
@@ -134,11 +135,19 @@ def solve_specs(specs):
 # This function creates one population from each model in *models*
 ###
 def initialize_populations(models):
+    
+    populations=[]
+    global literals
+    literals.sort()
 
     # TODO: the following loop should be parallelized
     for m in models:
-        #m=[m[i] for i in consts]
-        logging.debug(m)
+        #logging.debug(m[a0])
+        #m.get_py_value(a0)
+        population=[m.get_py_value(i) for i in literals]
+        populations.append([population]*num_pop)
+        
+    logging.debug(populations)
 
     return []
 
