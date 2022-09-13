@@ -24,7 +24,7 @@ smt_spec = ""
 num_species=2
 num_pop=2
 literals = []
-sub_script_preamble = SmtLibScript()
+
 
 
 ###
@@ -42,7 +42,7 @@ def parse_and_split(smt_spec, n):
     logging.debug("SMT assertion blocks extracted")
 
     sub_script_list = []
-    global sub_script_preamble
+    sub_script_preamble = SmtLibScript()
     for p in preamble_segment:
         sub_script_preamble.add_command(p)
     for i in range(n):
@@ -168,18 +168,8 @@ def stop_condition(populations):
 def cross_and_evolve(populations):
 
     # TODO: the following loop should be parallelized
-    for population in populations:
-        (parent1,parent2)= random.sample(population,2) #to improve (with fitness)
-        for i in len(parent1):
-            if random.random() < 0.7:
-                pos=randrange(16)
-                bin1=f"{parent1[i]:0posb}"
-                bin2=f"{parent2[i]:0posb}"
-                child1[i]=my_bin[:pos]+my_neighbor_bin[pos:]
-                child2[i]=my_neighbor_bin[:pos]+my_bin[pos:]
-                child1[i]=int(child1[i],2)
-                child2[i]=int(child2[i],2)
-        logging.debug(child1)
+    #for population in populations:
+       
     return []
 
 ###
