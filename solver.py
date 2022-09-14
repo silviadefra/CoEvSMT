@@ -18,11 +18,12 @@ from pysmt.smtlib.script import SmtLibScript
 from pysmt.shortcuts import Solver
 import copy
 import itertools
+import pygad
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
 num_species=2
-num_pop=2
+num_pop=4
 literals = []
 
 
@@ -118,7 +119,8 @@ def solve_specs(specs):
         log = script.evaluate(solver)
         # logging.debug(log)
         solver_response = solver.solve()
-        literals=list(solver.environment.formula_manager.get_all_symbols()) 
+        if script==specs[0]:
+           literals=list(solver.environment.formula_manager.get_all_symbols()) 
         if solver_response:
             model = solver.get_model()
             models.append(model)
@@ -143,7 +145,7 @@ def initialize_populations(models):
     # TODO: the following loop should be parallelized
     for m in models:
         population=[m.get_py_value(i) for i in literals]
-        populations.append([population]*num_pop)
+        populations.append([population]*num_pop)  #each population is made up of *num_pop* equal individuals
         
     #logging.debug(populations)
 
@@ -162,13 +164,68 @@ def stop_condition(populations):
     return True #stop
 
 ###
+# This function returns the fitness relative to an *individual*
+###
+    
+
+
+
+###
 # This function applies crossover and mutation to each population in *populations*.
 # Returns a new list of populations
 ###
 def cross_and_evolve(populations):
 
     # TODO: the following loop should be parallelized
-    #for population in populations:
+    for population in populations:
+        other_pop=populations[:]
+        other_pop.remove(population)
+
+        def fitness_func(individual,index):
+            fitness_list=[]
+            if len(other_pop)==1:
+                fitness_list.append(min([np.linalg.norm((np.array(individual) - np.array(p)), ord=1) for p in other_pop]))
+            else:
+                for pop in other_pop:
+                    fitness_list.append(min([np.linalg.norm((np.array(individual) - np.array(p)), ord=1) for p in pop]))
+            fitness=min(fitness_list)
+            fitness=350-fitness
+            return fitness
+
+        
+        fitness_function = fitness_func 
+
+        num_generations = 50
+        num_parents_mating = 2
+        initial_population=population
+        
+        #problem with gene_type
+
+        parent_selection_type = "sss"
+        keep_parents = 1
+
+        crossover_type = "single_point" 
+
+        mutation_type = "random"
+        mutation_percent_genes = 10
+
+        stop_criteria= "reach_350"
+
+        ga_instance = pygad.GA(num_generations=num_generations,
+                       num_parents_mating=num_parents_mating,
+                       fitness_func=fitness_function,
+                       stop_criteria=stop_criteria,
+                       initial_population=initial_population,
+                       parent_selection_type=parent_selection_type,
+                       keep_parents=keep_parents,
+                       crossover_type=crossover_type,
+                       mutation_type=mutation_type,
+                       mutation_percent_genes=mutation_percent_genes)
+        ga_instance.run()
+
+        solution, solution_fitness, solution_idx = ga_instance.best_solution()
+        #print("Parameters of the best solution : {solution}".format(solution=solution))
+        print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=solution_fitness))
        
     return []
 
@@ -234,22 +291,22 @@ def main():
 
     # STEP 3: initialize *N populations* with the *N models*
     populations = initialize_populations(models)
-
+    
     # STEP 4: repeat until *stop condition*
-    while not stop_condition(populations):
+    #while not stop_condition(populations):
 
         # STEP 5: Parallel crossover and mutation
-        new_populations = cross_and_evolve(populations)
+    new_populations = cross_and_evolve(populations)
 
         # STEP 6: Parallel selection (based on *fitness function*)
-        new_populations = select_fittests(new_populations)
+        #new_populations = select_fittests(new_populations)
 
         # STEP 7: If 2 populations collide: merge
-        pop_i, pop_j = population_collision(populations)
-        if not pop_i is None:
-            new_populations = merge_populations(new_populations, pop_i, pop_j)
+        #pop_i, pop_j = population_collision(populations)
+        #if not pop_i is None:
+            #new_populations = merge_populations(new_populations, pop_i, pop_j)
 
-        populations = new_populations
+        #populations = new_populations
 
     logging.info("End")
 
