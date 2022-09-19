@@ -15,7 +15,7 @@ from sys import exit
 from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
-from pysmt.shortcuts import Solver
+from pysmt.shortcuts import Solver, Equals, Int, And
 import copy
 import itertools
 import pygad
@@ -25,7 +25,9 @@ smt_spec = ""
 num_species=2
 num_pop=4
 literals = []
-
+d={'neighbor':[None]*num_species}
+data=pd.DataFrame(data=d)
+solvers=[]
 
 
 ###
@@ -55,21 +57,9 @@ def parse_and_split(smt_spec, n):
             sub_script.add_command(a)
     
         sub_script_list.append(sub_script)
-    #for i in range(n):
-        #sub_script = SmtLibScript()
-        #for p in preamble_segment:
-            #sub_script.add_command(p)
-        #for a in assertion_blocks[i]:
-            #sub_script.add_command(a)
-        #sub_script_list.append(sub_script)
 
     return sub_script_list
 
-
-#def store_literals(declarations):
-    #global literals
-    #for d in declarations:
-        #literals.append(d.serialize_to_string().split(' ')[1])
 
 ###
 # This function takes a SMT specification and returns its preamble (without the assertions)
@@ -81,7 +71,6 @@ def extract_preamble(script):
     # Only constants for now
     # decl_funs = script.filter_by_command_name("declare-fun")
 
-    #store_literals(decl_consts)
 
     return itertools.chain(set_logic, decl_consts)
 
@@ -112,25 +101,31 @@ def solve_specs(specs):
 
     models = []
     global literals
-
+    #global data
+    global solvers #solvers=[]
     # TODO: the following loop should be parallelized
     for script in specs:
         solver = Solver(name="z3")
         log = script.evaluate(solver)
         # logging.debug(log)
         solver_response = solver.solve()
+        solvers.append(solver)
         if script==specs[0]:
            literals=list(solver.environment.formula_manager.get_all_symbols()) 
+        
         if solver_response:
             model = solver.get_model()
             models.append(model)
+
         elif solver.is_unsat():
             print("unsat")
             exit()
+
         else:
             print("unknown")
             exit()
-
+    
+    #data['solver']=solvers
     return models
 
 ###
@@ -140,6 +135,7 @@ def initialize_populations(models):
     
     populations=[]
     global literals
+    #global data
     literals.sort()
 
     # TODO: the following loop should be parallelized
@@ -148,7 +144,7 @@ def initialize_populations(models):
         populations.append([population]*num_pop)  #each population is made up of *num_pop* equal individuals
         
     #logging.debug(populations)
-
+    #data['population']=populations
     return populations
 
 ###
@@ -160,46 +156,51 @@ def stop_condition(populations):
         stop=True
     else:
         stop=False
+ 
+    #if len(data.index.values)==1:
+        #stop=True
+    #else:
+        #stop=False
 
     return True #stop
 
-###
-# This function returns the fitness relative to an *individual*
-###
-    
-
-
 
 ###
-# This function applies crossover and mutation to each population in *populations*.
+# This function applies a genetic algorithm to each population in *populations*.
 # Returns a new list of populations
 ###
-def cross_and_evolve(populations):
-
+def genetic_algorithm(populations):
     # TODO: the following loop should be parallelized
-    for population in populations:
-        other_pop=populations[:]
-        other_pop.remove(population)
+
+    for i in range(len(populations)):
+        other_pop=populations[:i]+populations[i+1:]
+        solver=solvers[i]
+        
+###
+# This function takes an individual and returns his fitness, considering if he is a solution of the relative solver.
+###
 
         def fitness_func(individual,index):
-            fitness_list=[]
-            if len(other_pop)==1:
-                fitness_list.append(min([np.linalg.norm((np.array(individual) - np.array(p)), ord=1) for p in other_pop]))
+            formula=And([Equals(x,Int(int(y))) for (x,y) in zip(literals,individual)]) #for now Int
+            if not solver.is_sat(formula):
+                fitness=350
+            
             else:
+                fitness_list=[]
                 for pop in other_pop:
-                    fitness_list.append(min([np.linalg.norm((np.array(individual) - np.array(p)), ord=1) for p in pop]))
-            fitness=min(fitness_list)
+                    fitness_list.append(min([np.linalg.norm((individual - p), ord=1) for p in pop]))
+                fitness=min(fitness_list)
             fitness=350-fitness
             return fitness
 
         
         fitness_function = fitness_func 
 
-        num_generations = 50
+        num_generations = 500
         num_parents_mating = 2
-        initial_population=population
+        initial_population=populations[i]
         
-        #problem with gene_type
+        gene_type=int  #int for now
 
         parent_selection_type = "sss"
         keep_parents = 1
@@ -207,17 +208,21 @@ def cross_and_evolve(populations):
         crossover_type = "single_point" 
 
         mutation_type = "random"
-        mutation_percent_genes = 10
+        mutation_percent_genes = 80
 
         stop_criteria= "reach_350"
+        save_solutions=True
+        #allow_duplicate_genes=False
 
         ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating,
+                       gene_type=gene_type,
                        fitness_func=fitness_function,
                        stop_criteria=stop_criteria,
                        initial_population=initial_population,
                        parent_selection_type=parent_selection_type,
                        keep_parents=keep_parents,
+                       #on_generation=on_generation,
                        crossover_type=crossover_type,
                        mutation_type=mutation_type,
                        mutation_percent_genes=mutation_percent_genes)
@@ -225,22 +230,24 @@ def cross_and_evolve(populations):
 
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
         #print("Parameters of the best solution : {solution}".format(solution=solution))
-        print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=solution_fitness))
-       
-    return []
+        print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=350-solution_fitness))
 
-###
-# This function eliminates the worst individuals
-###
-def select_fittests(populations):
-    # TODO: TBI
-    return []
+        if solution_fitness==0:
+            populations[i]=[list(solution)]*num_pop
+            return populations
+
+        else:
+            logging.debug(list(ga_instance.population))
+            populations[i]=ga_instance.population
+    return populations
 
 ###
 # This function returns (i,j) if populations i and j collide (the have a common individual). (None, None) otherwise
 ###
 def population_collision(populations):
-    # TODO: TBI
+    # TODO: the following loop should be parallelized
+    
+
     return None, None
 
 ###
@@ -295,14 +302,11 @@ def main():
     # STEP 4: repeat until *stop condition*
     #while not stop_condition(populations):
 
-        # STEP 5: Parallel crossover and mutation
-    new_populations = cross_and_evolve(populations)
+        # STEP 5: Parallel genetic algorithm (based on *fitness function*)
+    new_populations = genetic_algorithm(populations)
 
-        # STEP 6: Parallel selection (based on *fitness function*)
-        #new_populations = select_fittests(new_populations)
-
-        # STEP 7: If 2 populations collide: merge
-        #pop_i, pop_j = population_collision(populations)
+        # STEP 6: If 2 populations collide: merge
+        #pop_i, pop_j = population_collision(new_populations)
         #if not pop_i is None:
             #new_populations = merge_populations(new_populations, pop_i, pop_j)
 
