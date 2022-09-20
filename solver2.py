@@ -94,7 +94,7 @@ def split_assertions(script, n):
 
 ###
 # This function solves a list of specs and returns a list of models (one for each spec).
-# Model i in the returned list is None if spec is is UNSAT.
+# If a solver is unsat/unknow the function prints unsat/unknow
 ###
 def solve_specs(specs):
 
@@ -116,13 +116,10 @@ def solve_specs(specs):
             model = solver.get_model()
             models.append(model)
 
-        elif solver.is_unsat():
-            print("unsat")
+        else:
+            print("unsat")       #problem with unknown
             exit()
 
-        else:
-            print("unknown")
-            exit()
     
     data['solver']=solvers
     return models
@@ -161,10 +158,10 @@ def stop_condition():
 
 ###
 # This function applies a genetic algorithm to each population in *populations*.
-# Returns a new list of populations
 ###
 def genetic_algorithm():
     # TODO: the following loop should be parallelized
+    global data
 
     for i in list(data.index.values):
         solver=data.at[i,'solver']
@@ -175,6 +172,7 @@ def genetic_algorithm():
 ###
 
         def fitness_func(individual,ind):
+            global data
             formula=And([Equals(x,Int(int(y))) for (x,y) in zip(literals,individual)]) #for now Int
             if not solver.is_sat(formula):
                 fitness=350
@@ -244,11 +242,18 @@ def genetic_algorithm():
 
 
 ###
-# This function returns a list of populations where population i and j have been merged
+# This function merges populations i and j 
 ###
 def merge_populations(i, j):
-    # TODO: TBI
-    return []
+    
+    global data
+
+    for a in data.at[j,'solver'].assertions:
+        data.at[i,'solver'].add_assertion(a)
+    data.at[i,'neighbor']=None
+    data=data.drop(j)
+
+    return 0
 
 
 
@@ -293,17 +298,16 @@ def main():
     initialize_populations(models)
     
     # STEP 4: repeat until *stop condition*
-    #while not stop_condition():
+    while not stop_condition():
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-    genetic_algorithm()
+        genetic_algorithm()
 
         # STEP 6: If 2 populations collide: merge
-    for i in list(data.index.values):
-        if not data.at[i,'neighbor'] is None:
-            new_populations = merge_populations( i, data.at[i,'neighbor'])
+        for i in list(data.index.values):
+            if not data.at[i,'neighbor'] is None:
+                merge_populations(i,data.at[i,'neighbor'])
 
-        #populations = new_populations
 
     logging.info("End")
 
