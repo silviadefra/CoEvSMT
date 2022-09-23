@@ -330,6 +330,7 @@ def main():
         for i in list(data.index.values):
             if data.at[i,'neighbor'] is not None:
                 merge_populations(i,data.at[i,'neighbor'])
+                break
         j+=1
     logging.debug("Generation: {num_gen}".format(num_gen=j))
     logging.debug("Time: {time}".format(time=time.time()-t))
