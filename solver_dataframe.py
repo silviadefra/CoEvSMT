@@ -159,7 +159,7 @@ def stop_condition():
 ###
 # This function applies a genetic algorithm to each population in *populations*.
 ###
-def genetic_algorithm(j):
+def genetic_algorithm():
  
     global data
 
@@ -226,7 +226,7 @@ def genetic_algorithm(j):
 
         stop_criteria= "reach_0"
         save_solutions=True
-        allow_duplicate_genes=False
+        #allow_duplicate_genes=False
         #on_generation=on_gen
 
         ga_instance = pygad.GA(num_generations=num_generations,
@@ -241,7 +241,7 @@ def genetic_algorithm(j):
                        crossover_type=crossover_type,
                        keep_elitism=keep_elitism,
                        #keep_parents=keep_parents,
-                       allow_duplicate_genes=allow_duplicate_genes,
+                       #allow_duplicate_genes=allow_duplicate_genes,
                        #on_generation=on_generation,
                        mutation_type=mutation_type,
                        mutation_probability=mutation_probability)
@@ -250,14 +250,10 @@ def genetic_algorithm(j):
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
         #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
         #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
-        if solution_fitness==0:
-            data.at[index,'population']=[list(solution)]*num_species
-            data.at[index,'fitness']=[solution_fitness]*num_species
-            return 0
-        else:
-            data.at[index,'population']=[list(p) for p in ga_instance.population]
-            data.at[index,'fitness']=list(ga_instance.last_generation_fitness)
-    return 0
+        
+        data.at[index,'population']=[list(p) for p in ga_instance.population]
+        data.at[index,'fitness']=list(ga_instance.last_generation_fitness)
+    return solution
 
 
 
@@ -309,7 +305,9 @@ def main():
 
     ### Main algorithm
     logging.info("Beginning")
-
+    
+    t=time.time()
+  
     d={'neighbor':[None]*num_species,'fitness':[[0]*num_pop]*num_species}
     data=pd.DataFrame(data=d)
 
@@ -326,7 +324,7 @@ def main():
     while not stop_condition():
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-        genetic_algorithm(j)
+        solution=genetic_algorithm()
 
         # STEP 6: If 2 populations collide: merge
         for i in list(data.index.values):
@@ -334,7 +332,8 @@ def main():
                 merge_populations(i,data.at[i,'neighbor'])
         j+=1
     logging.debug("Generation: {num_gen}".format(num_gen=j))
-    logging.debug("Solution: {sol}".format(sol=data))
+    logging.debug("Time: {time}".format(time=time.time()-t))
+    logging.debug("Solution: {sol}".format(sol=solution))
     logging.info("End")
 
 # Così lo rendiamo eseguibile
