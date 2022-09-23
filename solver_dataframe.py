@@ -25,8 +25,7 @@ smt_spec = ""
 num_species=2
 num_pop=4
 literals = []
-d={'neighbor':[None]*num_species}
-data=pd.DataFrame(data=d)
+data=None
 
 
 ###
@@ -133,6 +132,7 @@ def initialize_populations(models):
     global literals
     global data
     literals.sort()
+    
 
     # TODO: the following loop should be parallelized
     for m in models:
@@ -159,10 +159,11 @@ def stop_condition():
 ###
 # This function applies a genetic algorithm to each population in *populations*.
 ###
-def genetic_algorithm():
-    # TODO: the following loop should be parallelized
+def genetic_algorithm(j):
+ 
     global data
 
+    # TODO: the following loop should be parallelized
     for i in list(data.index.values):
         solver=data.at[i,'solver']
         index=i
@@ -175,46 +176,58 @@ def genetic_algorithm():
             global data
             formula=And([Equals(x,Int(int(y))) for (x,y) in zip(literals,individual)]) #for now Int
             if not solver.is_sat(formula):
-                fitness=350
+                fitness=- math.inf
             
             else:
                 fitness_list=[]
                 for i in list(data.index.values):
-
                     if i==index:
                         continue
                   
-                    fitness_i = min([np.linalg.norm((individual - p), ord=1) for p in data.at[i,'population']])
-
+                    valid_fitness=[]
+                    for p,f in zip(data.at[i,'population'],data.at[i,'fitness']):
+                        if f!= -math.inf:
+                            valid_fitness.append(np.linalg.norm((individual - p), ord=1))
+ 
+                    fitness_i =-1* min(valid_fitness)
                     if fitness_i==0:
                         data.at[index,'neighbor']=i
                     fitness_list.append(fitness_i)
-                fitness=min(fitness_list)
+                fitness=max(fitness_list)
                 
-            fitness=350-fitness
+            #logging.debug("Fitness of {ind}: {fit}".format(ind=individual, fit=fitness))
             return fitness
+
+        #def on_gen(ga):
+            #logging.debug("Generation {num_gen}".format(num_gen=ga.generations_completed))
+            #logging.debug(ga.population)
 
         
         fitness_function = fitness_func 
 
-        num_generations = 500
-        num_parents_mating = 2
+        num_generations =1
+        num_parents_mating = math.ceil(num_pop/2)
         initial_population=data.at[index,'population']
         
         gene_type=int  #int for now
 
         parent_selection_type = "sss"
-        keep_parents = 1
+        keep_elitism=math.ceil(num_pop/4)
+        
 
         crossover_type = "single_point" 
 
         mutation_type = "random"
-        mutation_percent_genes = 80
+        #mutation_probability= 0.8
+        
+        random_mutation_min_val=-3
+        random_mutation_max_val=3
+        mutation_probability= 0.1
 
-        stop_criteria= "reach_350"
+        stop_criteria= "reach_0"
         save_solutions=True
-        #allow_duplicate_genes=False
-        #on_generation=on_generation
+        allow_duplicate_genes=False
+        #on_generation=on_gen
 
         ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating,
@@ -223,20 +236,27 @@ def genetic_algorithm():
                        stop_criteria=stop_criteria,
                        initial_population=initial_population,
                        parent_selection_type=parent_selection_type,
-                       keep_parents=keep_parents,
+                       random_mutation_min_val=random_mutation_min_val,
+                       random_mutation_max_val=random_mutation_max_val,
                        crossover_type=crossover_type,
+                       keep_elitism=keep_elitism,
+                       #keep_parents=keep_parents,
+                       allow_duplicate_genes=allow_duplicate_genes,
+                       #on_generation=on_generation,
                        mutation_type=mutation_type,
-                       mutation_percent_genes=mutation_percent_genes)
+                       mutation_probability=mutation_probability)
         ga_instance.run()
 
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
-        logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
-        logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=350-solution_fitness,pop=index))
+        #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
+        #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
         if solution_fitness==0:
-            data.at[index,'population']=[list(solution)]*num_pop
-            return populations
+            data.at[index,'population']=[list(solution)]*num_species
+            data.at[index,'fitness']=[solution_fitness]*num_species
+            return 0
         else:
             data.at[index,'population']=[list(p) for p in ga_instance.population]
+            data.at[index,'fitness']=list(ga_instance.last_generation_fitness)
     return 0
 
 
@@ -270,7 +290,7 @@ def main():
     parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
     args = parser.parse_args()
 
-    global smt_spec, num_species, num_pop
+    global smt_spec, num_species, num_pop, data
 
     if args.file:
         file = open(args.smt, "r")
@@ -285,8 +305,13 @@ def main():
     if args.population:
         pop_size = args.population
 
+    
+
     ### Main algorithm
     logging.info("Beginning")
+
+    d={'neighbor':[None]*num_species,'fitness':[[0]*num_pop]*num_species}
+    data=pd.DataFrame(data=d)
 
     # STEP 1: parse *SMT specification* and split it into *N* smaller *SMT specifications*
     sub_specs = parse_and_split(smt_spec, num_species)
@@ -296,19 +321,20 @@ def main():
 
     # STEP 3: initialize *N populations* with the *N models*
     initialize_populations(models)
-    
+    j=0
     # STEP 4: repeat until *stop condition*
     while not stop_condition():
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-        genetic_algorithm()
+        genetic_algorithm(j)
 
         # STEP 6: If 2 populations collide: merge
         for i in list(data.index.values):
-            if not data.at[i,'neighbor'] is None:
+            if data.at[i,'neighbor'] is not None:
                 merge_populations(i,data.at[i,'neighbor'])
-
-
+        j+=1
+    logging.debug("Generation: {num_gen}".format(num_gen=j))
+    logging.debug("Solution: {sol}".format(sol=data))
     logging.info("End")
 
 # Così lo rendiamo eseguibile
