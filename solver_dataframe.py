@@ -23,7 +23,7 @@ import pygad
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
 num_species=2
-num_pop=4
+num_pop=8
 literals = []
 data=None
 
@@ -220,13 +220,13 @@ def genetic_algorithm():
         mutation_type = "random"
         #mutation_probability= 0.8
         
-        random_mutation_min_val=-3
-        random_mutation_max_val=3
+        random_mutation_min_val=-2
+        random_mutation_max_val=2
         mutation_probability= 0.1
 
         stop_criteria= "reach_0"
         save_solutions=True
-        #allow_duplicate_genes=False
+        allow_duplicate_genes=False
         #on_generation=on_gen
 
         ga_instance = pygad.GA(num_generations=num_generations,
@@ -332,9 +332,11 @@ def main():
                 merge_populations(i,data.at[i,'neighbor'])
                 break
         j+=1
-    logging.debug("Generation: {num_gen}".format(num_gen=j))
-    logging.debug("Time: {time}".format(time=time.time()-t))
-    logging.debug("Solution: {sol}".format(sol=solution))
+    f=open("solutions.txt","a")
+    f.write("Generation: {num_gen}\n".format(num_gen=j))
+    f.write("Time: {time}\n".format(time=time.time()-t))
+    f.write("Solution: {sol}\n".format(sol=solution))
+    f.close()
     logging.info("End")
 
 # Così lo rendiamo eseguibile
