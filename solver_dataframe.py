@@ -25,6 +25,7 @@ smt_spec = ""
 num_species=2
 num_pop=8
 literals = []
+types=[]
 data=None
 
 
@@ -100,6 +101,7 @@ def solve_specs(specs):
     models = []
     global literals
     global data
+    global types
     solvers=[]
     # TODO: the following loop should be parallelized
     for script in specs:
@@ -110,6 +112,7 @@ def solve_specs(specs):
         solvers.append(solver)
         if script==specs[0]:
            literals=list(solver.environment.formula_manager.get_all_symbols()) 
+           types=[l.symbol_type() for l in literals]
         
         if solver_response:
             model = solver.get_model()
@@ -130,9 +133,7 @@ def initialize_populations(models):
     
     populations=[]
     global literals
-    global data
-    literals.sort()
-    
+    global data    
 
     # TODO: the following loop should be parallelized
     for m in models:
@@ -332,10 +333,13 @@ def main():
                 merge_populations(i,data.at[i,'neighbor'])
                 break
         j+=1
+    output = []
+    for l,s in zip(literals, solution):
+        output.append("{lit}={sol}".format(lit=l,sol=s))
     f=open("solutions.txt","a")
     f.write("Generation: {num_gen}\n".format(num_gen=j))
+    f.write("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
     f.write("Time: {time}\n".format(time=time.time()-t))
-    f.write("Solution: {sol}\n".format(sol=solution))
     f.close()
     logging.info("End")
 
