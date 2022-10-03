@@ -132,14 +132,18 @@ def solve_specs(specs):
 def initialize_populations(models):
     
     populations=[]
+    neighbors=[]
     global literals
     global data    
 
     # TODO: the following loop should be parallelized
     for m in models:
         population=[m.get_py_value(i) for i in literals]
-        populations.append([population]*num_pop)  #each population is made up of *num_pop* equal individuals    
-    
+        populations.append([population]*num_pop)  #each population is made up of *num_pop* equal individuals
+        neighbors.append(population)
+
+    random.shuffle(neighbors)   
+    data['neighbor']=neighbors
     data['population']=populations
     
     return 0
@@ -188,16 +192,27 @@ def genetic_algorithm():
                     valid_fitness=[]
                     for p,f in zip(data.at[i,'population'],data.at[i,'fitness']):
                         if f!= -math.inf:
-                            valid_fitness.append(np.linalg.norm((individual - p), ord=1))
- 
-                    fitness_i =-1* min(valid_fitness)
-                    if fitness_i==0:
-                        data.at[index,'neighbor']=i
+                            valid_fitness.append([np.linalg.norm((individual - p), ord=1),p])
+                    
+                    fitness_i = min(valid_fitness, key=lambda item: item[0])
+                    if fitness_i[0]==0:
+                        data.at[index,'merge']=i
+                    fitness_i[0]=-1*fitness_i[0]
                     fitness_list.append(fitness_i)
-                fitness=max(fitness_list)
+                best=max(fitness_list, key=lambda item: item[0])
+                data.at[index,'neighbor'] = best[1]
+                fitness = best[0]
                 
             #logging.debug("Fitness of {ind}: {fit}".format(ind=individual, fit=fitness))
             return fitness
+
+        def parent_selection_func(fitness, num_parents, ga_instance):
+            global num_pop,data
+            
+            (parents,indices)=ga_instance.steady_state_selection(fitness[:num_pop-1],num_parents-1)
+            parents=np.concatenate((parents,[data.at[index,'neighbor']]),axis=0)
+            indices=np.insert(indices,num_parents-1,[num_pop-1])
+            return parents, indices
 
         #def on_gen(ga):
             #logging.debug("Generation {num_gen}".format(num_gen=ga.generations_completed))
@@ -208,19 +223,23 @@ def genetic_algorithm():
 
         num_generations =1
         num_parents_mating = math.ceil(num_pop/2)
-        initial_population=data.at[index,'population']
+        
+        probability=0.5
+        if random.random() < probability:
+            min_pos=data.at[index,'fitness'].index(min(data.at[index,'fitness']))
+            initial_population=data.at[index,'population'][:min_pos]+ data.at[index,'population'][min_pos+1:]
+            initial_population.append(data.at[index,'neighbor'])
+            parent_selection_type =parent_selection_func
+        else:
+            initial_population=data.at[index,'population']
+            parent_selection_type ="sss"
         
         gene_type=int  #int for now
-
-        parent_selection_type = "sss"
         keep_elitism=math.ceil(num_pop/4)
-        
 
         crossover_type = "single_point" 
 
-        mutation_type = "random"
-        #mutation_probability= 0.8
-        
+        mutation_type = "random"        
         random_mutation_min_val=-2
         random_mutation_max_val=2
         mutation_probability= 0.1
@@ -267,7 +286,7 @@ def merge_populations(i, j):
 
     for a in data.at[j,'solver'].assertions:
         data.at[i,'solver'].add_assertion(a)
-    data.at[i,'neighbor']=None
+    data.at[i,'merge']=None
     data=data.drop(j)
 
     return 0
@@ -308,8 +327,9 @@ def main():
     logging.info("Beginning")
     
     t=time.time()
-  
-    d={'neighbor':[None]*num_species,'fitness':[[0]*num_pop]*num_species}
+    
+    
+    d={'merge':[None]*num_species,'fitness':[[0]*num_pop]*num_species}
     data=pd.DataFrame(data=d)
 
     # STEP 1: parse *SMT specification* and split it into *N* smaller *SMT specifications*
@@ -329,8 +349,8 @@ def main():
 
         # STEP 6: If 2 populations collide: merge
         for i in list(data.index.values):
-            if data.at[i,'neighbor'] is not None:
-                merge_populations(i,data.at[i,'neighbor'])
+            if data.at[i,'merge'] is not None:
+                merge_populations(i,data.at[i,'merge'])
                 break
         j+=1
     output = []
