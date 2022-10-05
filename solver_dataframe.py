@@ -26,6 +26,7 @@ num_species=2
 num_pop=8
 literals = []
 types=[]
+smt_types=[]
 data=None
 
 
@@ -94,14 +95,15 @@ def split_assertions(script, n):
 
 ###
 # This function solves a list of specs and returns a list of models (one for each spec).
-# If a solver is unsat/unknow the function prints unsat/unknow
+# If a solver is unsat the function prints unsat
+#This function creates the list of literals
 ###
 def solve_specs(specs):
 
     models = []
     global literals
+    global smt_types
     global data
-    global types
     solvers=[]
     # TODO: the following loop should be parallelized
     for script in specs:
@@ -110,10 +112,7 @@ def solve_specs(specs):
         # logging.debug(log)
         solver_response = solver.solve()
         solvers.append(solver)
-        if script==specs[0]:
-           literals=list(solver.environment.formula_manager.get_all_symbols()) 
-           types=[l.symbol_type() for l in literals]
-        
+ 
         if solver_response:
             model = solver.get_model()
             models.append(model)
@@ -122,28 +121,31 @@ def solve_specs(specs):
             print("unsat")       #problem with unknown
             exit()
 
-    
+    literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
+    smt_types=[l.symbol_type() for l in literals]
     data['solver']=solvers
     return models
 
 ###
-# This function creates one population from each model in *models*
+# This function creates one population from each model in *models* and the list of types
 ###
 def initialize_populations(models):
     
     populations=[]
     neighbors=[]
     global literals
-    global data    
+    global data 
+    global types   
 
     # TODO: the following loop should be parallelized
     for m in models:
-        population=[m.get_py_value(i) for i in literals]
-        populations.append([population]*num_pop)  #each population is made up of *num_pop* equal individuals
-        neighbors.append(population)
+        individual=[m.get_py_value(i) for i in literals]
+        populations.append([individual]*num_pop)  #each population is made up of *num_pop* equal individuals
+        neighbors.append(individual)   
 
+    types=[type(i) for i in individual]  #returns the list of types
     random.shuffle(neighbors)   
-    data['neighbor']=neighbors
+    data['neighbor']=neighbors #from data['neighbor'] we get one parent for the genetic alg, initially it is chosen randomly 
     data['population']=populations
     
     return 0
@@ -152,13 +154,8 @@ def initialize_populations(models):
 # This function returns true when the computation is over
 ###
 def stop_condition():
- 
-    if len(data.index.values)==1:
-        stop=True
-    else:
-        stop=False
 
-    return stop
+    return len(data.index.values)==1
 
 
 ###
@@ -167,6 +164,8 @@ def stop_condition():
 def genetic_algorithm():
  
     global data
+
+
 
     # TODO: the following loop should be parallelized
     for i in list(data.index.values):
@@ -179,7 +178,7 @@ def genetic_algorithm():
 
         def fitness_func(individual,ind):
             global data
-            formula=And([Equals(x,Int(int(y))) for (x,y) in zip(literals,individual)]) #for now Int
+            formula=And([Equals(x,Int(y)) for (x,y) in zip(literals, individual)]) #formula=And([Equals(x,z(y)) for (x,z,y) in zip(literals, smt_types, individual)]) 
             if not solver.is_sat(formula):
                 fitness=- math.inf
             
@@ -191,7 +190,7 @@ def genetic_algorithm():
                   
                     valid_fitness=[]
                     for p,f in zip(data.at[i,'population'],data.at[i,'fitness']):
-                        if f!= -math.inf:
+                        if f!= -math.inf:   
                             valid_fitness.append([np.linalg.norm((individual - p), ord=1),p])
                     
                     fitness_i = min(valid_fitness, key=lambda item: item[0])
@@ -209,7 +208,7 @@ def genetic_algorithm():
         def parent_selection_func(fitness, num_parents, ga_instance):
             global num_pop,data
             
-            (parents,indices)=ga_instance.steady_state_selection(fitness[:num_pop-1],num_parents-1)
+            (parents,indices) = ga_instance.steady_state_selection(fitness[:num_pop-1],num_parents-1)
             parents=np.concatenate((parents,[data.at[index,'neighbor']]),axis=0)
             indices=np.insert(indices,num_parents-1,[num_pop-1])
             return parents, indices
@@ -233,8 +232,10 @@ def genetic_algorithm():
         else:
             initial_population=data.at[index,'population']
             parent_selection_type ="sss"
-        
-        gene_type=int  #int for now
+
+        num_genes=len(types)
+        gene_type=types.copy() 
+ 
         keep_elitism=math.ceil(num_pop/4)
 
         crossover_type = "single_point" 
@@ -251,10 +252,11 @@ def genetic_algorithm():
 
         ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating,
-                       gene_type=gene_type,
                        fitness_func=fitness_function,
-                       stop_criteria=stop_criteria,
                        initial_population=initial_population,
+                       num_genes=num_genes,
+                       gene_type=gene_type,
+                       stop_criteria=stop_criteria,
                        parent_selection_type=parent_selection_type,
                        random_mutation_min_val=random_mutation_min_val,
                        random_mutation_max_val=random_mutation_max_val,
@@ -266,7 +268,7 @@ def genetic_algorithm():
                        mutation_type=mutation_type,
                        mutation_probability=mutation_probability)
         ga_instance.run()
-
+        
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
         #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
         #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
@@ -342,17 +344,17 @@ def main():
     initialize_populations(models)
     j=0
     # STEP 4: repeat until *stop condition*
-    while not stop_condition():
+    #while not stop_condition():
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-        solution=genetic_algorithm()
+    solution=genetic_algorithm()
 
         # STEP 6: If 2 populations collide: merge
-        for i in list(data.index.values):
-            if data.at[i,'merge'] is not None:
-                merge_populations(i,data.at[i,'merge'])
-                break
-        j+=1
+        #for i in list(data.index.values):
+            #if data.at[i,'merge'] is not None:
+                #merge_populations(i,data.at[i,'merge'])
+                #break
+        #j+=1
     output = []
     for l,s in zip(literals, solution):
         output.append("{lit}={sol}".format(lit=l,sol=s))
