@@ -22,11 +22,13 @@ import pygad
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
-num_species=2
+num_species=4
 num_pop=8
+num_gen=None
+distance=0
 literals = []
 types=[]
-smt_types=[]
+list_functions=[]
 data=None
 
 
@@ -93,6 +95,8 @@ def split_assertions(script, n):
 
     return assertion_blocks
 
+
+
 ###
 # This function solves a list of specs and returns a list of models (one for each spec).
 # If a solver is unsat the function prints unsat
@@ -102,7 +106,6 @@ def solve_specs(specs):
 
     models = []
     global literals
-    global smt_types
     global data
     solvers=[]
     # TODO: the following loop should be parallelized
@@ -118,11 +121,11 @@ def solve_specs(specs):
             models.append(model)
 
         else:
-            print("unsat")       #problem with unknown
+            print("unsat")      
             exit()
 
     literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
-    smt_types=[l.symbol_type() for l in literals]
+
     data['solver']=solvers
     return models
 
@@ -135,7 +138,10 @@ def initialize_populations(models):
     neighbors=[]
     global literals
     global data 
-    global types   
+    global types
+    global list_functions 
+  
+  
 
     # TODO: the following loop should be parallelized
     for m in models:
@@ -144,6 +150,7 @@ def initialize_populations(models):
         neighbors.append(individual)   
 
     types=[type(i) for i in individual]  #returns the list of types
+    list_functions=[Int if i==int else Real if i==float else Bool for i in types] #TODO
     random.shuffle(neighbors)   
     data['neighbor']=neighbors #from data['neighbor'] we get one parent for the genetic alg, initially it is chosen randomly 
     data['population']=populations
@@ -164,8 +171,19 @@ def stop_condition():
 def genetic_algorithm():
  
     global data
+    num_generations =1
+    num_parents_mating = math.ceil(num_pop/2)
 
+    keep_elitism=math.ceil(num_pop/4)
 
+    crossover_type = "single_point" 
+
+    mutation_type = "random"        
+    random_mutation_min_val=-2
+    random_mutation_max_val=2
+    mutation_probability= 0.1
+
+    stop_criteria= "reach_0"
 
     # TODO: the following loop should be parallelized
     for i in list(data.index.values):
@@ -178,7 +196,8 @@ def genetic_algorithm():
 
         def fitness_func(individual,ind):
             global data
-            formula=And([Equals(x,Int(y)) for (x,y) in zip(literals, individual)]) #formula=And([Equals(x,z(y)) for (x,z,y) in zip(literals, smt_types, individual)]) 
+            global list_functions
+            formula=And([Equals(x,z(y)) for (x,y,z) in zip(literals, individual,list_functions)]) 
             if not solver.is_sat(formula):
                 fitness=- math.inf
             
@@ -219,9 +238,6 @@ def genetic_algorithm():
 
         
         fitness_function = fitness_func 
-
-        num_generations =1
-        num_parents_mating = math.ceil(num_pop/2)
         
         probability=0.5
         if random.random() < probability:
@@ -235,17 +251,7 @@ def genetic_algorithm():
 
         num_genes=len(types)
         gene_type=types.copy() 
- 
-        keep_elitism=math.ceil(num_pop/4)
-
-        crossover_type = "single_point" 
-
-        mutation_type = "random"        
-        random_mutation_min_val=-2
-        random_mutation_max_val=2
-        mutation_probability= 0.1
-
-        stop_criteria= "reach_0"
+        
         save_solutions=True
         allow_duplicate_genes=False
         #on_generation=on_gen
@@ -304,11 +310,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("smt", type=str, help='input SMT specification') # SMT file
     parser.add_argument("--species", type=int, help='initial number of species') #Default potrebbe essere uguale al numero dei processori disponibili, oppure 2
-    parser.add_argument("--population", type=int, help='initial number of individuals for each species') #Default potrebbe essere 2
+    parser.add_argument("--population", type=int, help='initial number of individuals for each species') #Default potrebbe essere 8
     parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
+    parser.add_argument("--distance", type=int, help='distance between species')#Default 0
+    parser.add_argument("--generations", type=int, help='maximum number of generations to stop')
     args = parser.parse_args()
 
-    global smt_spec, num_species, num_pop, data
+    global smt_spec, num_species, num_pop, num_gen, data, distance
 
     if args.file:
         file = open(args.smt, "r")
@@ -322,6 +330,12 @@ def main():
 
     if args.population:
         pop_size = args.population
+
+    if args.distance:
+        distance=args.distance
+
+    if args.generations:
+        num_gen=args.generations
 
     
 
@@ -344,17 +358,17 @@ def main():
     initialize_populations(models)
     j=0
     # STEP 4: repeat until *stop condition*
-    #while not stop_condition():
+    while not stop_condition():
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-    solution=genetic_algorithm()
+        solution=genetic_algorithm()
 
         # STEP 6: If 2 populations collide: merge
-        #for i in list(data.index.values):
-            #if data.at[i,'merge'] is not None:
-                #merge_populations(i,data.at[i,'merge'])
-                #break
-        #j+=1
+        for i in list(data.index.values):
+            if data.at[i,'merge'] is not None:
+                merge_populations(i,data.at[i,'merge'])
+                break
+        j+=1
     output = []
     for l,s in zip(literals, solution):
         output.append("{lit}={sol}".format(lit=l,sol=s))
