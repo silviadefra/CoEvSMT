@@ -15,7 +15,7 @@ from sys import exit
 from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
-from pysmt.shortcuts import Solver, Equals, Int, And
+from pysmt.shortcuts import Solver, Equals, Int, And, Real, Bool
 import copy
 import itertools
 import pygad
