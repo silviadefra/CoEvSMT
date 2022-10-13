@@ -1,7 +1,7 @@
 #!/usr/bin python3
 
 from z3 import *
-from multiprocessing import Manager, shared_memory
+from multiprocessing import Manager, shared_memory, cpu_count
 from multiprocessing.managers import SharedMemoryManager
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
@@ -27,6 +27,7 @@ num_species=2
 num_pop=8
 num_gen=None
 distance=0
+num_proc=cpu_count()
 
 ###
 # This function takes a SMT specification and splits it into N sub specitications returned as a list
@@ -96,8 +97,21 @@ def split_assertions(script, n):
 # Model i in the returned list is None if spec is is UNSAT.
 ###
 def solve_specs(spec):
-    # TODO: TBI
-    return []
+    solver = Solver(name="z3")
+    log = spec.evaluate(solver)
+    solver_response = solver.solve()
+ 
+    if solver_response:
+        model = solver.get_model()
+        literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
+        individual=[model.get_py_value(i) for i in literals]
+        population=[individual]*num_pop
+    else:
+        print("unsat")      
+        exit()
+
+    return population
+
 
 ###
 # This function creates one population from each model in *models*
@@ -117,7 +131,7 @@ def stop_condition(populations):
 # This function applies crossover and mutation to each population in *populations*.
 # Returns a new list of populations
 ###
-def genetic_alghoritm():
+def genetic_algorithm():
     # TODO: TBI
     return []
 
@@ -151,9 +165,10 @@ def main():
     parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
     parser.add_argument("--distance", type=int, help='distance between species')#Default 0
     parser.add_argument("--generations", type=int, help='maximum number of generations to stop')
+    parser.add_argument("--process", type=int, help='number of process to use')
     args = parser.parse_args()
 
-    global smt_spec, num_species, num_pop, num_gen, distance
+    global smt_spec, num_species, num_pop, num_gen, distance, num_proc
     smt_spec = args.smt
 
     if args.file:
@@ -175,24 +190,23 @@ def main():
     if args.generations:
         num_gen=args.generations
 
+    if args.process and args.process<= num_proc:
+        num_proc=args.process
+
     ### Main algorithm
     logging.info("Beginning")
 
     # STEP 1: parse *SMT specification* and split it into *N* smaller *SMT specifications*
     sub_specs = parse_and_split(smt_spec, num_species)
 
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(num_proc) as executor:
 
-        # STEP 2: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*)
-        models = []
-        for result in executor.map(solve_specs,sub_specs):
-            models.append(result)
-
-        # STEP 3: initialize *N populations* with the *N models*
+        # STEP 2-3: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*) and initialize *N populations* with the *N models*
         populations =[]
-        for result in executor.map(initialize_populations,models):
+        for result in executor.map(solve_specs,sub_specs):
             populations.append(result)
-
+        logging.debug(populations)
+            
         # STEP 4: repeat until *stop condition*
         while not stop_condition(populations):
 
@@ -213,7 +227,6 @@ def main():
 
 # Così lo rendiamo eseguibile
 if __name__ == "__main__":
-    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.ERROR)
     logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
     main()
 
