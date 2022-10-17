@@ -1,5 +1,6 @@
 #!/usr/bin python3
 
+from solver_dataframe import initialize_populations
 from z3 import *
 from multiprocessing import Manager, shared_memory, cpu_count
 from multiprocessing.managers import SharedMemoryManager
@@ -16,7 +17,7 @@ from sys import exit
 from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
-from pysmt.shortcuts import Solver, Equals, Int, And
+from pysmt.shortcuts import Solver, Equals, Int, And, Real, Bool
 import copy
 import itertools
 import pygad
@@ -25,7 +26,7 @@ import pygad
 smt_spec = ""
 num_species=2
 num_pop=8
-num_gen=None
+num_gen=200
 distance=0
 num_proc=cpu_count()
 
@@ -98,50 +99,139 @@ def split_assertions(script, n):
 ###
 def solve_specs(spec):
     solver = Solver(name="z3")
-    log = spec.evaluate(solver)
+    spec.evaluate(solver)
     solver_response = solver.solve()
  
     if solver_response:
         model = solver.get_model()
         literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
         individual=[model.get_py_value(i) for i in literals]
-        population=[individual]*num_pop
+
     else:
         print("unsat")      
         exit()
 
-    return population
-
-
-###
-# This function creates one population from each model in *models*
-###
-def initialize_populations(models):
-    # TODO: TBI
-    return []
+    return individual
 
 ###
 # This function returns true when the computation is over
 ###
-def stop_condition(populations):
-    # TODO: TBI
-    return True
+def stop_condition(num_species,j,num_gen):
+
+    if j==num_gen:
+        return True
+    else:
+        return True #num_species==1
 
 ###
 # This function applies crossover and mutation to each population in *populations*.
 # Returns a new list of populations
 ###
-def genetic_algorithm():
-    # TODO: TBI
-    return []
+def genetic_algorithm(index,pop,spec,num_species,fit,neighbor):
+
+    merge=None
+    solver= Solver(name="z3")
+    spec.evaluate(solver)
+    literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
+    types=[type(i) for i in pop[0][0]]  #returns the list of types
+    list_functions=[Int if i==int else Real if i==float else Bool for i in types] #TODO   
+###
+# This function takes an individual and returns his fitness, considering if he is a solution of the relative solver.
+###
+
+    def fitness_func(individual,ind):
+
+        global merge,neighbor
+        formula=And([Equals(x,z(y)) for (x,y,z) in zip(literals, individual,list_functions)]) 
+        if not solver.is_sat(formula):
+                fitness=- math.inf
+            
+        else:
+            fitness_list=[]
+            for i in range(num_species):
+                if i==index:
+                    continue
+                  
+                valid_fitness=[]
+                for p,f in zip(pop[i],fit[i]):
+                    if f!= -math.inf:   
+                        valid_fitness.append([np.linalg.norm((individual - p), ord=1),p])
+                    
+                fitness_i = min(valid_fitness, key=lambda item: item[0])
+                if fitness_i[0]==0:
+                    merge=i
+                fitness_i[0]=-1*fitness_i[0]
+                fitness_list.append(fitness_i)
+            best=max(fitness_list, key=lambda item: item[0])
+            neighbor = best[1]
+            fitness = best[0]
+                
+            #logging.debug("Fitness of {ind}: {fit}".format(ind=individual, fit=fitness))
+        return fitness
+    
+
+    def on_gen(ga):
+        
+        pop[index]=[list(p) for p in ga.population] 
+        fit[index]=list(ga.last_generation_fitness)
+
+    
+
+    def crossover_func(parents, offspring_size, ga):
+
+        global neighbor
+        probability=0.5
+        if random.random() < probability:
+            parents=np.concatenate((parents,[neighbor]),axis=0)
+        offspring=ga.single_point_crossover(parents,offspring_size)
+
+        return offspring
+
+        
+    
+    initial_population=pop[index]        
+    num_generations =100
+    fitness_function = fitness_func
 
 
-###
-# This function returns (i,j) if populations i and j collide (the have a common individual). (None, None) otherwise
-###
-def population_collision(populations):
-    # TODO: TBI
-    return None, None
+    parent_selection_type ='sss'
+    num_parents_mating = math.ceil(len(pop[index])/2)
+    keep_elitism=math.ceil(len(pop[index])/4)
+
+    num_genes=len(types)
+    gene_type=types
+    on_generation=on_gen
+
+    crossover_type = crossover_func
+
+    mutation_type = "random"        
+    random_mutation_min_val=-2
+    random_mutation_max_val=2
+    mutation_probability= 0.1
+
+    stop_criteria= "reach_0"
+
+    ga_instance = pygad.GA(num_generations=num_generations,
+                       num_parents_mating=num_parents_mating,
+                       fitness_func=fitness_function,
+                       initial_population=initial_population,
+                       num_genes=num_genes,
+                       gene_type=gene_type,
+                       stop_criteria=stop_criteria,
+                       parent_selection_type=parent_selection_type,
+                       random_mutation_min_val=random_mutation_min_val,
+                       random_mutation_max_val=random_mutation_max_val,
+                       crossover_type=crossover_type,
+                       keep_elitism=keep_elitism,
+                       #keep_parents=keep_parents,
+                       #allow_duplicate_genes=allow_duplicate_genes,
+                       on_generation=on_generation,
+                       mutation_type=mutation_type,
+                       mutation_probability=mutation_probability)
+    ga_instance.run()
+
+    return merge,index
+
 
 ###
 # This function returns a list of populations where population i and j have been merged
@@ -203,26 +293,37 @@ def main():
 
         # STEP 2-3: solve the *N SMT specifications* and finds *N models* (otherwise *UNSAT*) and initialize *N populations* with the *N models*
         populations =[]
+        neighbors=[]
         for result in executor.map(solve_specs,sub_specs):
-            populations.append(result)
-        logging.debug(populations)
-            
+            populations.append([result]*num_pop)
+            neighbors.append(result)
+
+        random.shuffle(neighbors)
+
+        mgr = Manager()
+        populations = mgr.list(populations)
+        fitness=mgr.list([[0]*num_pop]*num_species)
+
+        j=0   
+        lock = Lock()
         # STEP 4: repeat until *stop condition*
-        while not stop_condition(populations):
+        while j==0:#not stop_condition(num_species,j,num_gen):
 
             # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-            solutions=[]
-            futures=[executor.submit(genetic_algorithm) for i in num_species]
+            futures=[executor.submit(genetic_algorithm,i,populations,sub_specs[i],num_species,fitness,neighbors[i]) for i in range(num_species)]
+
+            # STEP 6: If 2 populations collide: merge
             for future in as_completed(futures):
-                solutions.append(future.result())
+                (pop_i,pop_j)=future.result()
+                if pop_i is not None:
+                    lock.acquire()
+                    new_populations = merge_populations(populations, pop_i, pop_j)
+                    lock.release()
 
-            # STEP 7: If 2 populations collide: merge
-            pop_i, pop_j = population_collision(populations)
-            if not pop_i is None:
-               new_populations = merge_populations(new_populations, pop_i, pop_j)
-
-            populations = new_populations
+            
+            j+=1
         executor.shutdown()
+        logging.debug(fitness)
     logging.info("End")
 
 # Così lo rendiamo eseguibile
