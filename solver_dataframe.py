@@ -1,5 +1,6 @@
 #!/usr/bin python3
 
+from operator import truediv
 from z3 import *
 from multiprocessing import Process
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,7 +25,7 @@ import pygad
 smt_spec = ""
 num_species=4
 num_pop=8
-num_gen=None
+num_gen=200000
 distance=0
 literals = []
 types=[]
@@ -160,9 +161,12 @@ def initialize_populations(models):
 ###
 # This function returns true when the computation is over
 ###
-def stop_condition():
+def stop_condition(j):
 
-    return len(data.index.values)==1
+    if j==num_gen:
+        return True
+    else:
+        return len(data.index.values)==1
 
 
 ###
@@ -227,7 +231,7 @@ def genetic_algorithm():
         def parent_selection_func(fitness, num_parents, ga_instance):
             global num_pop,data
             
-            (parents,indices) = ga_instance.steady_state_selection(fitness[:num_pop-1],num_parents-1)
+            (parents,indices) = ga_instance.steady_state_selection(fitness[:-1],num_parents-1)
             parents=np.concatenate((parents,[data.at[index,'neighbor']]),axis=0)
             indices=np.insert(indices,num_parents-1,[num_pop-1])
             return parents, indices
@@ -358,7 +362,7 @@ def main():
     initialize_populations(models)
     j=0
     # STEP 4: repeat until *stop condition*
-    while not stop_condition():
+    while not stop_condition(j):
 
         # STEP 5: Parallel genetic algorithm (based on *fitness function*)
         solution=genetic_algorithm()
