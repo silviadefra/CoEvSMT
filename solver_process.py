@@ -1,14 +1,14 @@
 #!/usr/bin python3
 
+from lib2to3.pgen2 import literals
 from solver_dataframe import initialize_populations
 from z3 import *
-from multiprocessing import Manager, shared_memory, cpu_count
+from multiprocessing import Manager, cpu_count
 from multiprocessing.managers import SharedMemoryManager
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import math
 import pandas as pd
-from threading import Lock
 import random
 import time
 import argparse
@@ -26,7 +26,7 @@ import pygad
 smt_spec = ""
 num_species=2
 num_pop=8
-num_gen=200
+num_gen=2000
 distance=0
 num_proc=cpu_count()
 
@@ -111,7 +111,7 @@ def solve_specs(spec):
         print("unsat")      
         exit()
 
-    return individual
+    return [individual,literals]
 
 ###
 # This function returns true when the computation is over
@@ -120,19 +120,17 @@ def stop_condition(num_species,j,num_gen):
 
     if j==num_gen:
         return True
-    else:
-        return True #num_species==1
+    return num_species==1
 
 ###
 # This function applies crossover and mutation to each population in *populations*.
 # Returns a new list of populations
 ###
-def genetic_algorithm(index,pop,spec,num_species,fit,neighbor):
+def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals):
 
     merge=None
     solver= Solver(name="z3")
     spec.evaluate(solver)
-    literals=list(solver.environment.formula_manager.get_all_symbols()) #returns the list of symbol names
     types=[type(i) for i in pop[0][0]]  #returns the list of types
     list_functions=[Int if i==int else Real if i==float else Bool for i in types] #TODO   
 ###
@@ -171,9 +169,11 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor):
     
 
     def on_gen(ga):
-        
-        pop[index]=[list(p) for p in ga.population] 
-        fit[index]=list(ga.last_generation_fitness)
+        #TODO
+        #logging.debug(ga.population[0])
+        #pop[index]=[list(p) for p in ga.population] 
+        pop[index]=ga.population.copy()
+        fit[index]=list(ga.last_generation_fitness) #changeit
 
     
 
@@ -190,7 +190,7 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor):
         
     
     initial_population=pop[index]        
-    num_generations =100
+    num_generations =500
     fitness_function = fitness_func
 
 
@@ -230,15 +230,30 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor):
                        mutation_probability=mutation_probability)
     ga_instance.run()
 
-    return merge,index
+    solution, solution_fitness, solution_idx = ga_instance.best_solution()
+    #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
+    #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
+
+    return merge,index,neighbor
 
 
 ###
 # This function returns a list of populations where population i and j have been merged
 ###
-def merge_populations(populations, i, j):
-    # TODO: TBI
-    return []
+def merge_populations(fit,pop,specs, to_merge):
+    to_keep=[]
+    for pair in to_merge:
+        if pair[0] in to_keep or pair[1] in to_keep:
+            continue
+        to_keep.append(pair[0])
+        to_keep.append(pair[1])
+        for a in specs[pair[0]].filter_by_command_name('assert'):
+            specs[pair[1]].add_command(a)
+    to_kill=to_keep[0::2]
+    new_specs=[elem for i,elem in enumerate(specs) if i not in to_kill]
+    new_pop=[elem for i,elem in enumerate(pop) if i not in to_kill]
+    new_fit=[elem for i,elem in enumerate(fit) if i not in to_kill]
+    return fit,new_pop, new_specs,
 
 
 
@@ -285,6 +300,7 @@ def main():
 
     ### Main algorithm
     logging.info("Beginning")
+    t=time.time()
 
     # STEP 1: parse *SMT specification* and split it into *N* smaller *SMT specifications*
     sub_specs = parse_and_split(smt_spec, num_species)
@@ -295,35 +311,49 @@ def main():
         populations =[]
         neighbors=[]
         for result in executor.map(solve_specs,sub_specs):
-            populations.append([result]*num_pop)
-            neighbors.append(result)
+            populations.append([result[0]]*num_pop)
+            neighbors.append(result[0])
+        literals=result[1]
 
         random.shuffle(neighbors)
 
         mgr = Manager()
         populations = mgr.list(populations)
         fitness=mgr.list([[0]*num_pop]*num_species)
+        #lock=mgr.Lock()
 
         j=0   
-        lock = Lock()
         # STEP 4: repeat until *stop condition*
-        while j==0:#not stop_condition(num_species,j,num_gen):
+        while not stop_condition(num_species,j,num_gen):
 
             # STEP 5: Parallel genetic algorithm (based on *fitness function*)
-            futures=[executor.submit(genetic_algorithm,i,populations,sub_specs[i],num_species,fitness,neighbors[i]) for i in range(num_species)]
+            futures=[executor.submit(genetic_algorithm,i,populations,sub_specs[i],num_species,fitness,neighbors[i],literals) for i in range(num_species)]
+
+            to_merge=[]
+            for future in as_completed(futures):
+                (pop_i,pop_j,new_neighbor)=future.result()
+                neighbors[pop_j]=new_neighbor
+                if pop_i is not None:
+                    to_merge.append([pop_i,pop_j])
 
             # STEP 6: If 2 populations collide: merge
-            for future in as_completed(futures):
-                (pop_i,pop_j)=future.result()
-                if pop_i is not None:
-                    lock.acquire()
-                    new_populations = merge_populations(populations, pop_i, pop_j)
-                    lock.release()
-
+            if to_merge:
+                (fitness,populations,sub_specs)=merge_populations(fitness,populations,sub_specs,to_merge)
+                num_species=num_species-len(populations)
             
             j+=1
         executor.shutdown()
-        logging.debug(fitness)
+    sol_index=fitness.index(min(fitness))
+    solution=populations[0][sol_index]
+    output = []
+    for l,s in zip(literals, solution):
+        output.append("{lit}={sol}".format(lit=l,sol=s))
+    f=open("solutions.txt","a")
+    f.write("Generation: {num_gen}\n".format(num_gen=j))
+    f.write("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
+    f.write("Time: {time}\n".format(time=time.time()-t))
+    f.close()  
+    logging.debug("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
     logging.info("End")
 
 # Così lo rendiamo eseguibile

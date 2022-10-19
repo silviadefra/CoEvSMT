@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENTRYPOINT [ "python", "./solver_dataframe.py" ]
+ENTRYPOINT [ "python", "./solver_process.py" ]
