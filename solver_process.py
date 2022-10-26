@@ -1,14 +1,10 @@
 #!/usr/bin python3
 
-from lib2to3.pgen2 import literals
-from solver_dataframe import initialize_populations
 from z3 import *
 from multiprocessing import Manager, cpu_count
-from multiprocessing.managers import SharedMemoryManager
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import math
-import pandas as pd
 import random
 import time
 import argparse
@@ -18,9 +14,9 @@ from io import StringIO
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.smtlib.script import SmtLibScript
 from pysmt.shortcuts import Solver, Equals, Int, And, Real, Bool
-import copy
 import itertools
 import pygad
+import csv
 
 # Parametri per l'algoritmo: vanno passati da linea di comando
 smt_spec = ""
@@ -94,8 +90,8 @@ def split_assertions(script, n):
     return assertion_blocks
 
 ###
-# This function solves a list of specs and returns a list of models (one for each spec).
-# Model i in the returned list is None if spec is is UNSAT.
+# This function solves a spec and returns a solution.
+# If the Model is UNSAT, this function prints unsat.
 ###
 def solve_specs(spec):
     solver = Solver(name="z3")
@@ -170,7 +166,7 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals):
 
     def on_gen(ga):
         #TODO
-        #logging.debug(ga.population[0])
+        #logging.debug(ga.last_generation_fitness)
         #pop[index]=[list(p) for p in ga.population] 
         pop[index]=ga.population.copy()
         fit[index]=list(ga.last_generation_fitness) #changeit
@@ -180,7 +176,7 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals):
     def crossover_func(parents, offspring_size, ga):
 
         global neighbor
-        probability=0.5
+        probability=0.5   #TODO 
         if random.random() < probability:
             parents=np.concatenate((parents,[neighbor]),axis=0)
         offspring=ga.single_point_crossover(parents,offspring_size)
@@ -190,7 +186,7 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals):
         
     
     initial_population=pop[index]        
-    num_generations =500
+    num_generations =500  #TODO
     fitness_function = fitness_func
 
 
@@ -230,7 +226,7 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals):
                        mutation_probability=mutation_probability)
     ga_instance.run()
 
-    solution, solution_fitness, solution_idx = ga_instance.best_solution()
+    #solution, solution_fitness, solution_idx = ga_instance.best_solution()
     #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
     #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
 
@@ -245,15 +241,14 @@ def merge_populations(fit,pop,specs, to_merge):
     for pair in to_merge:
         if pair[0] in to_keep or pair[1] in to_keep:
             continue
-        to_keep.append(pair[0])
-        to_keep.append(pair[1])
+        to_keep.extend(pair)
         for a in specs[pair[0]].filter_by_command_name('assert'):
             specs[pair[1]].add_command(a)
     to_kill=to_keep[0::2]
     new_specs=[elem for i,elem in enumerate(specs) if i not in to_kill]
     new_pop=[elem for i,elem in enumerate(pop) if i not in to_kill]
     new_fit=[elem for i,elem in enumerate(fit) if i not in to_kill]
-    return fit,new_pop, new_specs,
+    return new_fit,new_pop, new_specs,
 
 
 
@@ -270,7 +265,7 @@ def main():
     parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
     parser.add_argument("--distance", type=int, help='distance between species')#Default 0
     parser.add_argument("--generations", type=int, help='maximum number of generations to stop')
-    parser.add_argument("--process", type=int, help='number of process to use')
+    parser.add_argument("--processors", type=int, help='number of processors to use')
     args = parser.parse_args()
 
     global smt_spec, num_species, num_pop, num_gen, distance, num_proc
@@ -295,8 +290,8 @@ def main():
     if args.generations:
         num_gen=args.generations
 
-    if args.process and args.process<= num_proc:
-        num_proc=args.process
+    if args.processors and args.processors< num_proc:
+        num_proc=args.processors
 
     ### Main algorithm
     logging.info("Beginning")
@@ -348,10 +343,12 @@ def main():
     output = []
     for l,s in zip(literals, solution):
         output.append("{lit}={sol}".format(lit=l,sol=s))
-    f=open("solutions.txt","a")
-    f.write("Generation: {num_gen}\n".format(num_gen=j))
-    f.write("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
-    f.write("Time: {time}\n".format(time=time.time()-t))
+    t=time.time()-t
+    num_gen=j*500
+    final_result=[output,t,num_gen,num_species,num_pop,num_proc]
+    f=open("solutions","a")
+    writer = csv.writer(f)
+    writer.writerow(final_result)
     f.close()  
     logging.debug("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
     logging.info("End")
