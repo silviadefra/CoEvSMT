@@ -79,7 +79,7 @@ def extract_preamble(script):
 def split_assertions(script, n):
 
     assertions = script.filter_by_command_name("assert")
-    data = [ (random.random(), line) for line in assertions ]
+    data = [ (random.random(), line) for line in assertions ] #shuffle
     data.sort()
     assertion_blocks = []
 
@@ -108,8 +108,7 @@ def solve_specs(spec,literals):
         individual=[model.get_py_value(i) for i in literals]
 
     else:
-        print("unsat")      
-        exit()
+        individual="unsat"
 
     return individual
 
@@ -232,9 +231,9 @@ def genetic_algorithm(index,pop,spec,num_species,fit,neighbor,literals,mut_prob,
     ga_instance.run()
 
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
-    logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
-    logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
-    return merge,index,neig
+    #logging.debug("Population {pop}: Parameters of the best solution : {solution}".format(solution=solution,pop=index))
+    #logging.debug("Population {pop}: Fitness value of the best solution = {solution_fitness}".format(solution_fitness=-solution_fitness,pop=index))
+    return merge,index,neig, solution
 
 
 ###
@@ -266,7 +265,7 @@ def main():
     parser.add_argument("smt", type=str, help='input SMT specification') # SMT file
     parser.add_argument("--species", type=int, help='initial number of species') #Default potrebbe essere uguale al numero dei processori disponibili, oppure 2
     parser.add_argument("--population", type=int, help='initial number of individuals for each species') #Default potrebbe essere 2
-    parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false
+    parser.add_argument("--file", action='store_true', help='If set, smt specification is retrieved from file') #Default: false 
     parser.add_argument("--generations", type=int, help='maximum number of generations to stop')
     parser.add_argument("--mutation", type=int, help='probability of selecting a gene for applying the mutation operation')#Default 0.1
     parser.add_argument("--neighbor", type=int, help='probability of selecting a parent from the neighbor population') #Default 0.5
@@ -313,6 +312,14 @@ def main():
         populations =[]
         neighbors=[]
         for result in executor.map(solve_specs,sub_specs,itertools.repeat(literals)):
+            if result=="unsat":
+                print(result)
+                t=time.time()-t
+                final_result=[args.smt,num_proc,num_pop,num_gen,mut_prob,neig_prob,result,t] #chiedere num_gen max o quelle fatte?
+                with open("solutions.csv","a") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(final_result)
+                exit()
             populations.append([result]*num_pop)
             neighbors.append(result)
         random.shuffle(neighbors)
@@ -330,9 +337,11 @@ def main():
             futures=[executor.submit(genetic_algorithm,i,populations,sub_specs[i],num_species,fitness,neighbors[i],literals,mut_prob,neig_prob) for i in range(num_species)]
 
             to_merge=[]
+            best_sol=[None]*num_species
             for future in as_completed(futures):
-                (pop_i,pop_j,new_neighbor)=future.result()
+                (pop_i,pop_j,new_neighbor,best)=future.result()
                 neighbors[pop_j]=new_neighbor
+                best_sol[pop_j]=best
 
                 if pop_i is not None:
                     to_merge.append([pop_i,pop_j])
@@ -341,26 +350,36 @@ def main():
             if to_merge:
                 (fitness,populations,sub_specs)=merge_populations(fitness,populations,sub_specs,to_merge)
                 num_species=len(populations)
-            
+
             j+=1
+            logging.debug("Time: {time}, Fitness: {fit}, Num gen: {gen}".format(time=time.time()-t,fit=fitness,gen=j*500))
+            
         executor.shutdown()
-    sol_index=fitness.index(min(fitness))
-    solution=populations[0][sol_index]
-    output = []
-    for l,s in zip(literals, solution):
-        output.append("{lit}={sol}".format(lit=l,sol=s))
+    
+    if num_species==1:
+        output="sat"
+    else:
+        output="unknown"
     t=time.time()-t
     num_gen=j*500
-    final_result=[output,t,num_gen,num_species,num_pop,num_proc]
-    f=open("solutions","a")
-    writer = csv.writer(f)
-    writer.writerow(final_result)
-    f.close()  
-    logging.debug("Solution: [" + ", ".join(str(x) for x in output) + "]\n")
+    final_result=[args.smt,num_proc,num_pop,num_gen,mut_prob,neig_prob,output,t]
+    with open("solutions.csv","a") as f:
+        writer = csv.writer(f)
+        writer.writerow(final_result)
+       
+    best_output = []
+    for solution in best_sol:
+        a=[]
+        for l,s in zip(literals, solution):
+            a.append("{lit}={sol}".format(lit=l,sol=s))
+        best_output.append(a)
+    logging.debug("Fitness: {fit}".format(fit=fitness))     
+    logging.debug("Solution: [" + ", ".join(str(x) for x in best_output) + "]\n")
     logging.info("End")
 
 # Così lo rendiamo eseguibile
 if __name__ == "__main__":
-    logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
+    logging.basicConfig(filename='solutions.log', encoding='utf-8', level=logging.DEBUG)
+    #logging.basicConfig(format='[+] %(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
     main()
 
