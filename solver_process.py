@@ -64,14 +64,14 @@ def parse_and_split(smt_spec, n):
 def extract_preamble(script):
 
     set_logic = script.filter_by_command_name("set-logic")
-    decl_consts = script.filter_by_command_name("declare-const")
+    #decl_consts = script.filter_by_command_name("declare-const")
     
     # Only constants for now
-    #decl_funs = script.filter_by_command_name("declare-fun")
-    literals=[l.args[0] for l in decl_consts]
+    decl_funs = script.filter_by_command_name("declare-fun")
+    literals=[l.args[0] for l in decl_funs]
 
 
-    return itertools.chain(set_logic, decl_consts), literals
+    return itertools.chain(set_logic, decl_funs), literals
 
 ###
 # This function takes a SMT specification and returns the assertions splited into N sub assertions
